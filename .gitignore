@@ -22,6 +22,9 @@ sync-manual-request.json
 sync-run.lock
 **/sync-run.lock
 Conflicts/
+benchmarks/.build/
+benchmarks/results/logs/
+benchmarks/results/conflicts/
 *.pfx
 *.key
 

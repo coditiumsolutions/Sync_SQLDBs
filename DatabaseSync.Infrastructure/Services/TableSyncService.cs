@@ -116,10 +116,11 @@ public sealed class TableSyncService : ITableSyncService
 
             var hashSql = RowHashSqlBuilder.BuildRowHashExpression(table);
             var keyList = string.Join(", ", table.PrimaryKeyColumns.Select(column => Q(column.Name)));
+            var strippedKeys = StrippedKeyProjection(table);
 
             await ExecuteAsync(targetConnection, $"""
                 IF OBJECT_ID('tempdb..#SourceFp') IS NOT NULL DROP TABLE #SourceFp;
-                SELECT TOP (0) {keyList}, CONVERT(varbinary(32), 0x) AS RowHash
+                SELECT TOP (0) {strippedKeys}, CONVERT(varbinary(32), 0x) AS RowHash
                 INTO #SourceFp
                 FROM {table.FullName};
                 """, timeout, cancellationToken).ConfigureAwait(false);
@@ -275,6 +276,13 @@ public sealed class TableSyncService : ITableSyncService
                 SELECT TOP (0) * INTO #SyncStaging FROM {table.FullName};
                 """, timeout, cancellationToken).ConfigureAwait(false);
 
+            // Bulk copy into the temp table before IDENTITY_INSERT is turned on for the real table.
+            // SQL Server allows IDENTITY_INSERT for only one table per session, and SqlBulkCopy
+            // turns it on for a staging table that still has an identity column.
+            rows = await BulkCopyQueryAsync(
+                sourceConnection, targetConnection, selectSql, "#SyncStaging", copyable, timeout, settings.FingerprintBatchSize, transaction: null, cancellationToken)
+                .ConfigureAwait(false);
+
             if (table.HasIdentity)
             {
                 await ExecuteAsync(targetConnection, $"SET IDENTITY_INSERT {table.FullName} ON;", timeout, cancellationToken)
@@ -283,9 +291,6 @@ public sealed class TableSyncService : ITableSyncService
 
             try
             {
-                rows = await BulkCopyQueryAsync(
-                    sourceConnection, targetConnection, selectSql, "#SyncStaging", copyable, timeout, settings.FingerprintBatchSize, transaction: null, cancellationToken)
-                    .ConfigureAwait(false);
                 await ExecuteAsync(targetConnection, BuildMergeSql(table, copyable), timeout, cancellationToken).ConfigureAwait(false);
             }
             finally
@@ -396,45 +401,49 @@ public sealed class TableSyncService : ITableSyncService
 
         var hasUpsert = batch.Any(row => row.Kind is DiffKind.Insert or DiffKind.Update);
         var hasDelete = batch.Any(row => row.Kind == DiffKind.Delete);
+        if (hasUpsert)
+        {
+            await ExecuteAsync(targetConnection, "TRUNCATE TABLE #SyncStaging;", timeout, cancellationToken)
+                .ConfigureAwait(false);
+            var selectSql = $"""
+                SELECT {ColumnList(copyable, "src")}
+                FROM {table.FullName} AS src
+                INNER JOIN #BatchKeys AS k ON {Join("src", "k", table)}
+                WHERE k.Op IN ('I', 'U');
+                """;
+            await BulkCopyQueryAsync(
+                sourceConnection, targetConnection, selectSql, "#SyncStaging", copyable, timeout, batch.Count, transaction: null, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var identityOn = false;
         try
         {
-            if (hasUpsert && table.HasIdentity)
-            {
-                await ExecuteAsync(targetConnection, $"SET IDENTITY_INSERT {table.FullName} ON;", timeout, cancellationToken)
-                    .ConfigureAwait(false);
-                identityOn = true;
-            }
-
             await using var transaction = (SqlTransaction)await targetConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-            if (hasUpsert)
-            {
-                await ExecuteAsync(targetConnection, "TRUNCATE TABLE #SyncStaging;", timeout, cancellationToken, transaction)
-                    .ConfigureAwait(false);
-                var selectSql = $"""
-                    SELECT {ColumnList(copyable)}
-                    FROM {table.FullName} AS src
-                    INNER JOIN #BatchKeys AS k ON {Join("src", "k", table)}
-                    WHERE k.Op IN ('I', 'U');
-                    """;
-                await BulkCopyQueryAsync(
-                    sourceConnection, targetConnection, selectSql, "#SyncStaging", copyable, timeout, batch.Count, transaction, cancellationToken)
-                    .ConfigureAwait(false);
-                await ExecuteAsync(targetConnection, BuildMergeSql(table, copyable), timeout, cancellationToken, transaction)
-                    .ConfigureAwait(false);
-            }
+                if (hasUpsert)
+                {
+                    if (table.HasIdentity)
+                    {
+                        await ExecuteAsync(targetConnection, $"SET IDENTITY_INSERT {table.FullName} ON;", timeout, cancellationToken, transaction)
+                            .ConfigureAwait(false);
+                        identityOn = true;
+                    }
 
-            if (hasDelete)
-            {
-                await ExecuteAsync(targetConnection, $"""
-                    DELETE tgt
-                    FROM {table.FullName} AS tgt
-                    INNER JOIN #BatchKeys AS k ON {Join("tgt", "k", table)}
-                    WHERE k.Op = 'D';
-                    """, timeout, cancellationToken, transaction).ConfigureAwait(false);
-            }
+                    await ExecuteAsync(targetConnection, BuildMergeSql(table, copyable), timeout, cancellationToken, transaction)
+                        .ConfigureAwait(false);
+                }
+
+                if (hasDelete)
+                {
+                    await ExecuteAsync(targetConnection, $"""
+                        DELETE tgt
+                        FROM {table.FullName} AS tgt
+                        INNER JOIN #BatchKeys AS k ON {Join("tgt", "k", table)}
+                        WHERE k.Op = 'D';
+                        """, timeout, cancellationToken, transaction).ConfigureAwait(false);
+                }
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -632,10 +641,10 @@ public sealed class TableSyncService : ITableSyncService
         CancellationToken cancellationToken,
         string tableName = "#BatchKeys")
     {
-        var keyList = string.Join(", ", table.PrimaryKeyColumns.Select(column => Q(column.Name)));
+        var strippedKeys = StrippedKeyProjection(table);
         await ExecuteAsync(connection, $"""
             IF OBJECT_ID('tempdb..{tableName}') IS NOT NULL DROP TABLE {tableName};
-            SELECT TOP (0) CAST(N'I' AS char(1)) AS Op, {keyList}
+            SELECT TOP (0) CAST(N'I' AS char(1)) AS Op, {strippedKeys}
             INTO {tableName}
             FROM {table.FullName};
             """, timeout, cancellationToken).ConfigureAwait(false);
@@ -746,6 +755,28 @@ public sealed class TableSyncService : ITableSyncService
     }
 
     private static string Q(string identifier) => SqlQuoting.Quote(identifier);
+
+    /// <summary>
+    /// Identity columns keep the IDENTITY property through SELECT INTO. Temp tables that we fill
+    /// with explicit key values must cast those columns so the property is dropped.
+    /// </summary>
+    private static string StrippedKeyProjection(TableSchema table) =>
+        string.Join(", ", table.PrimaryKeyColumns.Select(column =>
+        {
+            var quoted = Q(column.Name);
+            return column.IsIdentity
+                ? $"CAST({quoted} AS {CastSqlType(column)}) AS {quoted}"
+                : quoted;
+        }));
+
+    private static string CastSqlType(ColumnSchema column) => column.SqlTypeName.ToLowerInvariant() switch
+    {
+        "nvarchar" or "nchar" or "sysname" => "nvarchar(4000)",
+        "varchar" or "char" => "varchar(8000)",
+        "varbinary" or "binary" => "varbinary(8000)",
+        "decimal" or "numeric" => "decimal(38, 10)",
+        _ => column.SqlTypeName
+    };
 
     private static char ParseOp(object value)
     {
