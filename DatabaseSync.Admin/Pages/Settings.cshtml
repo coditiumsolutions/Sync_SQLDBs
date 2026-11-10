@@ -1,0 +1,100 @@
+@page
+@model DatabaseSync.Admin.Pages.SettingsModel
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<h1 class="h3 mb-1">Settings</h1>
+<div class="form-hint mb-3">Config file: <code class="path">@Model.ConfigPath</code></div>
+
+<form method="post" class="row g-3" id="settingsForm">
+    <div class="panel mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+            <div>
+                <h2 class="h5 mb-1">Automatic sync timing (while service is running)</h2>
+                <div class="form-hint">
+                    Turn Auto sync <strong>ON</strong> to synchronise automatically while the service is running.
+                    Turn <strong>OFF</strong> to keep the service idle (no data sync).
+                </div>
+            </div>
+            <div class="toggle-wrap">
+                <span class="toggle-label" id="autoSyncStateLabel">@(Model.Input.EnableSynchronization ? "ON" : "OFF")</span>
+                <label class="switch" title="Auto sync on/off">
+                    <input asp-for="Input.EnableSynchronization" id="autoSyncToggle" />
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label asp-for="Input.AutoSyncEveryMinutes" class="form-label"></label>
+                <input asp-for="Input.AutoSyncEveryMinutes" class="form-control" />
+                <div class="form-hint">Example: 3 = sync about every 3 minutes.</div>
+                <span asp-validation-for="Input.AutoSyncEveryMinutes" class="text-danger"></span>
+            </div>
+            <div class="col-md-4">
+                <label asp-for="Input.AutoSyncStartTime" class="form-label"></label>
+                <input asp-for="Input.AutoSyncStartTime" class="form-control" placeholder="09:00" />
+                <div class="form-hint">Local time when auto sync may begin.</div>
+                <span asp-validation-for="Input.AutoSyncStartTime" class="text-danger"></span>
+            </div>
+            <div class="col-md-4">
+                <label asp-for="Input.AutoSyncEndTime" class="form-label"></label>
+                <input asp-for="Input.AutoSyncEndTime" class="form-control" placeholder="18:00" />
+                <div class="form-hint">Local time when auto sync must stop.</div>
+                <span asp-validation-for="Input.AutoSyncEndTime" class="text-danger"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel mb-3">
+        <h2 class="h5 mb-3">Other options</h2>
+        <div class="row g-3">
+            <div class="col-md-4 form-check">
+                <input asp-for="Input.SyncMainToOthers" class="form-check-input" />
+                <label asp-for="Input.SyncMainToOthers" class="form-check-label"></label>
+            </div>
+            <div class="col-md-4 form-check">
+                <input asp-for="Input.EnableDetailedLogging" class="form-check-input" />
+                <label asp-for="Input.EnableDetailedLogging" class="form-check-label"></label>
+            </div>
+            <div class="col-md-4"></div>
+
+            <div class="col-md-4">
+                <label asp-for="Input.RetryIntervalSeconds" class="form-label"></label>
+                <input asp-for="Input.RetryIntervalSeconds" class="form-control" />
+            </div>
+            <div class="col-md-4">
+                <label asp-for="Input.MaximumRetryAttempts" class="form-label"></label>
+                <input asp-for="Input.MaximumRetryAttempts" class="form-control" />
+            </div>
+            <div class="col-md-4">
+                <label asp-for="Input.CommandTimeoutSeconds" class="form-label"></label>
+                <input asp-for="Input.CommandTimeoutSeconds" class="form-control" />
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-accent">Save settings</button>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            const toggle = document.getElementById('autoSyncToggle');
+            const label = document.getElementById('autoSyncStateLabel');
+            function refresh() {
+                const on = !!toggle.checked;
+                label.textContent = on ? 'ON' : 'OFF';
+                label.classList.toggle('on', on);
+                label.classList.toggle('off', !on);
+            }
+            toggle.addEventListener('change', refresh);
+            refresh();
+        })();
+    </script>
+}

@@ -1,0 +1,207 @@
+﻿@page
+@model DatabaseSync.Admin.Pages.IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+    var main = Model.Configuration.Connections.FirstOrDefault(c => c.IsMain);
+    var enabled = Model.Configuration.Connections.Count(c => c.IsEnabled);
+    var targets = Model.Configuration.Connections.Count(c => c.IsEnabled && !c.IsMain);
+    var canStart = Model.ServiceStatus.CanStart;
+    var canStop = Model.ServiceStatus.CanStop;
+    var settings = Model.Configuration.SyncSettings;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-1">Dashboard</h1>
+        <div class="form-hint">Config: <code class="path">@Model.ConfigPath</code></div>
+    </div>
+    <form method="post" asp-page-handler="TestAll">
+        <button type="submit" class="btn btn-outline-secondary">Test all connections</button>
+    </form>
+</div>
+
+<div id="syncResultBanner" class="alert d-none" role="alert"></div>
+
+<div class="panel mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <h2 class="h5 mb-1">Sync control</h2>
+            <div class="form-hint">
+                Mode:
+                <strong>@(Model.ServiceStatus.UsesWindowsService ? "Windows Service" : "Worker process")</strong>
+                · Status:
+                @if (Model.ServiceStatus.IsRunning)
+                {
+                    <span class="badge-main">RUNNING</span>
+                }
+                else
+                {
+                    <span class="badge-target">STOPPED</span>
+                }
+            </div>
+            <div class="form-hint mt-1">
+                Auto timing:
+                every <strong>@(settings.AutoSyncEveryMinutes > 0 ? settings.AutoSyncEveryMinutes : Math.Max(1, settings.SyncIntervalSeconds / 60))</strong> min,
+                window <strong>@settings.AutoSyncStartTime</strong> - <strong>@settings.AutoSyncEndTime</strong>
+                (<a asp-page="/Settings">change</a>)
+            </div>
+            <div class="form-hint mt-2">
+                Last sync:
+                <strong id="syncStateText">@Model.SyncStatus.State</strong>
+                <span id="syncMessageText">— @Model.SyncStatus.Message</span>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <form method="post" asp-page-handler="StartService">
+                <button type="submit" class="btn btn-accent" disabled="@(!canStart)">Run sync service</button>
+            </form>
+            <form method="post" asp-page-handler="StopService">
+                <button type="submit" class="btn btn-outline-danger" disabled="@(!canStop)">Stop sync service</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="panel mb-3">
+    <h2 class="h5 mb-3">Server sync results</h2>
+    <div class="table-responsive">
+        <table class="table mb-0" id="serverResultsTable">
+            <thead>
+            <tr>
+                <th>Server</th>
+                <th>Role</th>
+                <th>IP / Database</th>
+                <th>Result</th>
+                <th>Reason</th>
+            </tr>
+            </thead>
+            <tbody id="serverResultsBody">
+            @if (Model.SyncStatus.Servers.Count == 0)
+            {
+                <tr>
+                    <td colspan="5" class="text-muted">No sync results yet. Click Run sync service.</td>
+                </tr>
+            }
+            else
+            {
+                foreach (var s in Model.SyncStatus.Servers)
+                {
+                    <tr>
+                        <td>@s.Name</td>
+                        <td>@(s.IsMain ? "MAIN" : "TARGET")</td>
+                        <td>@s.Server / @s.Database</td>
+                        <td>
+                            @if (s.Outcome is "Synced" or "Source" or "Connected")
+                            {
+                                <span class="badge-main">@s.Outcome</span>
+                            }
+                            else
+                            {
+                                <span class="badge-target">@s.Outcome</span>
+                            }
+                        </td>
+                        <td>@s.Reason</td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="stat-grid mb-3">
+    <div class="stat">
+        <div class="label">Connections</div>
+        <div class="value">@Model.Configuration.Connections.Count</div>
+    </div>
+    <div class="stat">
+        <div class="label">Enabled</div>
+        <div class="value">@enabled</div>
+    </div>
+    <div class="stat">
+        <div class="label">Main</div>
+        <div class="value" style="font-size:1.05rem;">@(main?.Name ?? "Not set")</div>
+    </div>
+    <div class="stat">
+        <div class="label">Targets</div>
+        <div class="value">@targets</div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const banner = document.getElementById('syncResultBanner');
+    const stateText = document.getElementById('syncStateText');
+    const messageText = document.getElementById('syncMessageText');
+    const body = document.getElementById('serverResultsBody');
+    let notifiedSuccessKey = sessionStorage.getItem('syncSuccessKey') || '';
+
+    function escapeHtml(value) {
+        return (value || '').toString()
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;');
+    }
+
+    function renderServers(servers) {
+        if (!servers || servers.length === 0) {
+            body.innerHTML = '<tr><td colspan="5" class="text-muted">No sync results yet. Click Run sync service.</td></tr>';
+            return;
+        }
+
+        body.innerHTML = servers.map(s => {
+            const role = s.isMain ? 'MAIN' : 'TARGET';
+            const badgeClass = (s.outcome === 'Synced' || s.outcome === 'Source' || s.outcome === 'Connected')
+                ? 'badge-main' : 'badge-target';
+            return `<tr>
+                <td>${escapeHtml(s.name)}</td>
+                <td>${role}</td>
+                <td>${escapeHtml(s.server)} / ${escapeHtml(s.database)}</td>
+                <td><span class="${badgeClass}">${escapeHtml(s.outcome)}</span></td>
+                <td>${escapeHtml(s.reason)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function refreshStatus() {
+        try {
+            const response = await fetch('?handler=SyncStatus', { cache: 'no-store' });
+            if (!response.ok) return;
+            const status = await response.json();
+
+            stateText.textContent = status.state || 'Idle';
+            messageText.textContent = status.message ? (' — ' + status.message) : '';
+            renderServers(status.servers || []);
+
+            const key = (status.finishedAtUtc || '') + '|' + (status.state || '');
+            if (status.state === 'Succeeded' && key !== notifiedSuccessKey) {
+                banner.className = 'alert alert-success';
+                banner.textContent = status.message || 'Database sync successfully completed.';
+                banner.classList.remove('d-none');
+                notifiedSuccessKey = key;
+                sessionStorage.setItem('syncSuccessKey', key);
+            } else if (status.state === 'Failed' && key !== notifiedSuccessKey) {
+                banner.className = 'alert alert-danger';
+                banner.textContent = status.message || 'Database sync failed.';
+                banner.classList.remove('d-none');
+                notifiedSuccessKey = key;
+                sessionStorage.setItem('syncSuccessKey', key);
+            } else if (status.state === 'Running') {
+                banner.className = 'alert alert-info';
+                banner.textContent = status.message || 'Database synchronisation is in progress...';
+                banner.classList.remove('d-none');
+            } else if (status.state === 'Skipped') {
+                banner.className = 'alert alert-warning';
+                banner.textContent = status.message || 'Sync skipped outside timing window.';
+                banner.classList.remove('d-none');
+            }
+        } catch (e) { }
+    }
+
+    refreshStatus();
+    setInterval(refreshStatus, 4000);
+})();
+</script>
+}

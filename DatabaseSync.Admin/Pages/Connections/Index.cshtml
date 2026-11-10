@@ -1,0 +1,76 @@
+@page
+@model DatabaseSync.Admin.Pages.Connections.IndexModel
+@{
+    ViewData["Title"] = "Connections";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-1">Connections</h1>
+        <div class="form-hint">Nominate any connection as Main. All other enabled connections become sync targets.</div>
+    </div>
+    <a class="btn btn-accent" asp-page="./Edit">Add connection</a>
+</div>
+
+<div class="panel">
+    @if (Model.Connections.Count == 0)
+    {
+        <p class="mb-0 text-muted">No connections yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Server / Database</th>
+                    <th>Enabled</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var c in Model.Connections)
+                {
+                    <tr>
+                        <td>
+                            <strong>@c.Name</strong>
+                        </td>
+                        <td>
+                            @if (c.IsMain)
+                            {
+                                <span class="badge-main">MAIN</span>
+                            }
+                            else
+                            {
+                                <span class="badge-target">TARGET</span>
+                            }
+                        </td>
+                        <td>@c.Server / @c.Database</td>
+                        <td>@(c.IsEnabled ? "Yes" : "No")</td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-secondary" asp-page="./Edit" asp-route-id="@c.Id">Edit</a>
+                            <form class="d-inline" method="post" asp-page-handler="Test">
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">Test</button>
+                            </form>
+                            @if (!c.IsMain)
+                            {
+                                <form class="d-inline" method="post" asp-page-handler="SetMain">
+                                    <input type="hidden" name="id" value="@c.Id" />
+                                    <button class="btn btn-sm btn-outline-success" type="submit">Make Main</button>
+                                </form>
+                            }
+                            <form class="d-inline" method="post" asp-page-handler="Delete" onsubmit="return confirm('Delete this connection?');">
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

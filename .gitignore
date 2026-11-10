@@ -1,0 +1,32 @@
+## .NET
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.DotSettings.user
+
+## Secrets / local overrides
+appsettings.*.local.json
+sync-config.json
+**/sync-config.json
+sync-status.json
+**/sync-status.json
+*.pfx
+*.key
+
+## Publish output
+publish/
+live_synchronisedb/
+live_sync_dbs/
+artifacts/
+
+## OS
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,61 @@
+{
+  "SyncSettings": {
+    "SyncIntervalSeconds": 120,
+    "AutoSyncEveryMinutes": 2,
+    "AutoSyncStartTime": "00:00",
+    "AutoSyncEndTime": "23:59",
+    "EnableSynchronization": false,
+    "RetryIntervalSeconds": 15,
+    "MaximumRetryAttempts": 2,
+    "EnableDetailedLogging": true,
+    "CommandTimeoutSeconds": 180,
+    "SyncMainToOthers": true
+  },
+  "Connections": [
+    {
+      "Id": "main-server",
+      "Name": "Main Cloud",
+      "IsMain": true,
+      "IsEnabled": true,
+      "Server": "YOUR_MAIN_IP",
+      "Database": "RND_PMS_Sync",
+      "IntegratedSecurity": false,
+      "UserId": "sa",
+      "Password": "YOUR_PASSWORD",
+      "ConnectionTimeoutSeconds": 15,
+      "Encrypt": true,
+      "TrustServerCertificate": true,
+      "ApplicationName": "Coditium.DatabaseSync"
+    },
+    {
+      "Id": "cloud-server-1",
+      "Name": "Cloud Server",
+      "IsMain": false,
+      "IsEnabled": true,
+      "Server": "YOUR_CLOUD_IP",
+      "Database": "RND_PMS_Sync",
+      "IntegratedSecurity": false,
+      "UserId": "sa",
+      "Password": "YOUR_PASSWORD",
+      "ConnectionTimeoutSeconds": 15,
+      "Encrypt": true,
+      "TrustServerCertificate": true,
+      "ApplicationName": "Coditium.DatabaseSync"
+    },
+    {
+      "Id": "cloud-server-2",
+      "Name": "Cloud Server 2",
+      "IsMain": false,
+      "IsEnabled": true,
+      "Server": "YOUR_CLOUD2_IP",
+      "Database": "RND_PMS_Sync",
+      "IntegratedSecurity": false,
+      "UserId": "sa",
+      "Password": "YOUR_PASSWORD",
+      "ConnectionTimeoutSeconds": 15,
+      "Encrypt": true,
+      "TrustServerCertificate": true,
+      "ApplicationName": "Coditium.DatabaseSync"
+    }
+  ]
+}

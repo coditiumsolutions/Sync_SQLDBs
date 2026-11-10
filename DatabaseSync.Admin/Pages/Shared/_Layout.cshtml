@@ -1,0 +1,39 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Coditium Database Sync Admin</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<header class="app-header">
+    <div class="container d-flex align-items-center justify-content-between py-3">
+        <a class="brand" asp-page="/Index">Coditium Sync Admin</a>
+        <nav class="nav-links">
+            <a asp-page="/Index">Dashboard</a>
+            <a asp-page="/Connections/Index">Connections</a>
+            <a asp-page="/Settings">Settings</a>
+        </nav>
+    </div>
+</header>
+<main class="container py-4">
+    @if (TempData["StatusMessage"] is string status && !string.IsNullOrWhiteSpace(status))
+    {
+        <div class="alert alert-success">@status</div>
+    }
+    @if (TempData["ErrorMessage"] is string error && !string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger">@error</div>
+    }
+    @RenderBody()
+</main>
+<footer class="container py-4 text-muted small">
+    Shared config file drives both the Admin UI and the Windows Worker service.
+</footer>
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
