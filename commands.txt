@@ -1,0 +1,15 @@
+//Stop Service
+sc stop Coditium.DatabaseSync
+//Path
+sc config Coditium.DatabaseSync binPath= "C:\Live\live_sync_dbs\DatabaseSync.Worker.exe"
+// Start Service
+sc start Coditium.DatabaseSync
+// Status Check
+sc query Coditium.DatabaseSync
+//SERVICE_NAME: Coditium.DatabaseSync
+//        TYPE               : 10  WIN32_OWN_PROCESS
+//        STATE              : 1  STOPPED
+//        WIN32_EXIT_CODE    : 0  (0x0)
+//        SERVICE_EXIT_CODE  : 0  (0x0)
+//        CHECKPOINT         : 0x0
+//        WAIT_HINT          : 0x0
