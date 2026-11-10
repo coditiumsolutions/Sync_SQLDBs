@@ -24,6 +24,7 @@ sync-status.json
 publish/
 live_synchronisedb/
 live_sync_dbs/
+*.rar
 artifacts/
 
 ## OS
