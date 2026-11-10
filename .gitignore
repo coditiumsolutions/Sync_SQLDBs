@@ -17,6 +17,11 @@ sync-config.json
 **/sync-config.json
 sync-status.json
 **/sync-status.json
+sync-manual-request.json
+**/sync-manual-request.json
+sync-run.lock
+**/sync-run.lock
+Conflicts/
 *.pfx
 *.key
 

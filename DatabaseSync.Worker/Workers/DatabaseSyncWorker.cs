@@ -1,31 +1,29 @@
+using DatabaseSync.Core.Enums;
 using DatabaseSync.Core.Interfaces;
 using DatabaseSync.Core.Models;
+using DatabaseSync.Core.Scheduling;
 
 namespace DatabaseSync.Worker.Workers;
 
 public sealed class DatabaseSyncWorker : BackgroundService
 {
-    private readonly IConnectivityCheckService _connectivityCheckService;
-    private readonly ISyncOrchestrator _syncOrchestrator;
+    private readonly ISyncCycleRunner _cycleRunner;
     private readonly ISyncConfigStore _configStore;
     private readonly ISyncStatusStore _statusStore;
-    private readonly ISqlConnectionFactory _connectionFactory;
+    private readonly IManualSyncRequestStore _requests;
     private readonly ILogger<DatabaseSyncWorker> _logger;
 
     public DatabaseSyncWorker(
-        IConnectivityCheckService connectivityCheckService,
-        ISyncOrchestrator syncOrchestrator,
+        ISyncCycleRunner cycleRunner,
         ISyncConfigStore configStore,
         ISyncStatusStore statusStore,
-        ISqlConnectionFactory connectionFactory,
+        IManualSyncRequestStore requests,
         ILogger<DatabaseSyncWorker> logger)
     {
-        _connectivityCheckService = connectivityCheckService
-            ?? throw new ArgumentNullException(nameof(connectivityCheckService));
-        _syncOrchestrator = syncOrchestrator ?? throw new ArgumentNullException(nameof(syncOrchestrator));
+        _cycleRunner = cycleRunner ?? throw new ArgumentNullException(nameof(cycleRunner));
         _configStore = configStore ?? throw new ArgumentNullException(nameof(configStore));
         _statusStore = statusStore ?? throw new ArgumentNullException(nameof(statusStore));
-        _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        _requests = requests ?? throw new ArgumentNullException(nameof(requests));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -33,23 +31,29 @@ public sealed class DatabaseSyncWorker : BackgroundService
     {
         var settings = _configStore.Get().SyncSettings;
         _logger.LogInformation(
-            "Coditium.DatabaseSync worker started. Synchronisation enabled: {EnableSynchronization}; IntervalMinutes={IntervalMinutes}; Window={Start}-{End}; Config={ConfigPath}",
-            settings.EnableSynchronization,
-            settings.AutoSyncEveryMinutes,
-            settings.AutoSyncStartTime,
-            settings.AutoSyncEndTime,
+            "Coditium.DatabaseSync worker started. Scheduled={ScheduledEnabled} ({ScheduleCount} entries), Interval={IntervalEnabled} every {IntervalValue} {IntervalUnit}, PollSeconds={PollSeconds}, DryRun={DryRun}, Config={ConfigPath}. Manual sync runs when a request is queued. Overlapping triggers are skipped; one manual request stays queued.",
+            settings.ScheduledSyncEnabled,
+            settings.Schedules.Count,
+            settings.IntervalSyncEnabled,
+            settings.IntervalValue,
+            settings.IntervalUnit,
+            settings.TriggerPollSeconds,
+            settings.DryRun,
             _configStore.ConfigFilePath);
 
         await Task.Yield();
+        var loggedSkips = new HashSet<string>(StringComparer.Ordinal);
+        DateTimeOffset? suppressIntervalUntil = null;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             settings = _configStore.Get().SyncSettings;
-            var interval = TimeSpan.FromSeconds(settings.GetEffectiveIntervalSeconds());
+            var poll = TimeSpan.FromSeconds(Math.Clamp(settings.TriggerPollSeconds, 1, 120));
 
             try
             {
-                await RunCycleAsync(settings, stoppingToken).ConfigureAwait(false);
+                suppressIntervalUntil = await EvaluateAsync(settings, loggedSkips, suppressIntervalUntil, stoppingToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -57,19 +61,18 @@ public sealed class DatabaseSyncWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unhandled error during the synchronisation cycle.");
-                await _statusStore.WriteAsync(new SyncRuntimeStatus
-                {
-                    State = "Failed",
-                    Message = $"Unhandled sync error: {ex.Message}",
-                    StartedAtUtc = DateTimeOffset.UtcNow,
-                    FinishedAtUtc = DateTimeOffset.UtcNow
-                }, stoppingToken).ConfigureAwait(false);
+                _logger.LogError(ex, "Unhandled error while evaluating sync triggers.");
+                var failed = _statusStore.Get();
+                failed.State = "Failed";
+                failed.Message = $"Unhandled sync error: {ex.Message}";
+                failed.StartedAtUtc ??= DateTimeOffset.UtcNow;
+                failed.FinishedAtUtc = DateTimeOffset.UtcNow;
+                await _statusStore.WriteAsync(failed, stoppingToken).ConfigureAwait(false);
             }
 
             try
             {
-                await Task.Delay(interval, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(poll, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -80,218 +83,188 @@ public sealed class DatabaseSyncWorker : BackgroundService
         _logger.LogInformation("Coditium.DatabaseSync worker is stopping.");
     }
 
-    private async Task RunCycleAsync(SyncSettings settings, CancellationToken cancellationToken)
+    private async Task<DateTimeOffset?> EvaluateAsync(
+        SyncSettings settings,
+        HashSet<string> loggedSkips,
+        DateTimeOffset? suppressIntervalUntil,
+        CancellationToken cancellationToken)
     {
-        var started = DateTimeOffset.UtcNow;
-        var localNow = DateTime.Now;
+        var now = DateTimeOffset.UtcNow;
+        var zone = TimeZoneInfo.Local;
+        var grace = TimeSpan.FromMinutes(settings.ScheduleGraceMinutes);
+        var status = _statusStore.Get();
+        var due = settings.ScheduledSyncEnabled
+            ? SyncSchedulePlanner.GetDue(settings.Schedules, now, zone, grace, status.FiredScheduleOccurrences)
+            : [];
+        var intervalDue = settings.IntervalSyncEnabled
+            && IntervalSchedule.IsDue(status.NextIntervalRunUtc, now)
+            && (suppressIntervalUntil is null || now >= suppressIntervalUntil.Value);
+        var manual = _requests.Read();
+        var decision = SyncTriggerSelector.Select(
+            manual is not null,
+            settings.ScheduledSyncEnabled,
+            due.Count > 0,
+            settings.IntervalSyncEnabled,
+            intervalDue);
 
-        if (!settings.IsWithinAutoSyncWindow(localNow))
+        if (decision is null)
         {
-            var skipMessage =
-                $"Automatic sync skipped outside configured time window ({settings.AutoSyncStartTime} - {settings.AutoSyncEndTime}). Current local time: {localNow:HH:mm}.";
-            _logger.LogInformation(skipMessage);
-
-            await _statusStore.WriteAsync(new SyncRuntimeStatus
-            {
-                State = "Skipped",
-                Message = skipMessage,
-                StartedAtUtc = started,
-                FinishedAtUtc = DateTimeOffset.UtcNow,
-                Servers = BuildIdleServerReports("Skipped", skipMessage)
-            }, cancellationToken).ConfigureAwait(false);
-            return;
+            await PublishClockAsync(settings, now, zone, grace, cancellationToken).ConfigureAwait(false);
+            return suppressIntervalUntil;
         }
 
-        _logger.LogInformation("Beginning synchronisation cycle at {TimestampUtc:u}.", started);
-
-        await _statusStore.WriteAsync(new SyncRuntimeStatus
+        var outcome = await _cycleRunner.TryRunAsync(decision.Value.Kind, cancellationToken).ConfigureAwait(false);
+        if (outcome.SkippedBecauseBusy)
         {
-            State = "Running",
-            Message = "Database synchronisation is in progress...",
-            StartedAtUtc = started
-        }, cancellationToken).ConfigureAwait(false);
-
-        var connectivity = await _connectivityCheckService
-            .CheckAllDatabasesAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var result in connectivity)
-        {
-            var roleTag = result.IsMain ? "MAIN" : "TARGET";
-            if (result.IsSuccessful)
-            {
-                _logger.LogInformation(
-                    "Database status [{RoleTag}]: {Name} => Connected ({Server}/{Database}) in {ElapsedMs} ms.",
-                    roleTag,
-                    result.ConnectionName,
-                    result.Server,
-                    result.Database,
-                    result.Elapsed.TotalMilliseconds);
-            }
-            else
+            var skipKey = decision.Value.Kind == SyncTriggerKind.Manual && manual is not null
+                ? "manual:" + manual.RequestId
+                : decision.Value.Kind + ":" + (due.FirstOrDefault().OccurrenceKey ?? now.ToString("yyyyMMddHHmm"));
+            if (loggedSkips.Add(skipKey))
             {
                 _logger.LogWarning(
-                    "Database status [{RoleTag}]: {Name} => {Status} ({Server}/{Database}). Error: {ErrorMessage}",
-                    roleTag,
-                    result.ConnectionName,
-                    result.Status,
-                    result.Server,
-                    result.Database,
-                    result.ErrorMessage);
+                    "Trigger {Trigger} did not start. {Message}",
+                    decision.Value.Kind,
+                    outcome.Message);
+                await RecordSkipAsync(decision.Value.Kind, outcome.Message, cancellationToken).ConfigureAwait(false);
             }
+
+            if (decision.Value.Kind == SyncTriggerKind.Interval || intervalDue)
+            {
+                suppressIntervalUntil = IntervalSchedule.After(now, settings.IntervalValue, settings.IntervalUnit);
+                await AdvanceIntervalAsync(settings, suppressIntervalUntil.Value, cancellationToken).ConfigureAwait(false);
+            }
+
+            return suppressIntervalUntil;
         }
 
-        if (!settings.EnableSynchronization)
+        if (!outcome.Started)
         {
-            var disabledMessage = "Connectivity check completed. Synchronisation is disabled in settings.";
-            await _statusStore.WriteAsync(new SyncRuntimeStatus
-            {
-                State = "Succeeded",
-                Message = disabledMessage,
-                StartedAtUtc = started,
-                FinishedAtUtc = DateTimeOffset.UtcNow,
-                Servers = connectivity.Select(c => new ServerSyncReport
-                {
-                    ConnectionId = c.ConnectionId,
-                    Name = c.ConnectionName,
-                    Server = c.Server,
-                    Database = c.Database,
-                    IsMain = c.IsMain,
-                    Outcome = c.IsSuccessful ? "Connected" : "Failed",
-                    Reason = c.IsSuccessful
-                        ? "Sync disabled in settings (connectivity only)."
-                        : c.ErrorMessage
-                }).ToList()
-            }, cancellationToken).ConfigureAwait(false);
+            _logger.LogWarning("Trigger {Trigger} did not start. {Message}", decision.Value.Kind, outcome.Message);
+            return suppressIntervalUntil;
+        }
+
+        await ConsumeOccurrencesAsync(settings, due, decision.Value.Kind == SyncTriggerKind.Interval || intervalDue, now, zone, grace, cancellationToken)
+            .ConfigureAwait(false);
+        loggedSkips.Clear();
+        return null;
+    }
+
+    private async Task PublishClockAsync(
+        SyncSettings settings,
+        DateTimeOffset now,
+        TimeZoneInfo zone,
+        TimeSpan grace,
+        CancellationToken cancellationToken)
+    {
+        var status = _statusStore.Get();
+        if (status.State == "Running")
+        {
             return;
         }
 
-        var syncResult = await _syncOrchestrator.RunAsync(cancellationToken).ConfigureAwait(false);
-
-        _logger.LogInformation(
-            "Sync cycle finished. Success={Success}; Main={Main}; Targets={Targets}; TablesOk={Ok}; TablesFailed={Failed}; Error={Error}",
-            syncResult.Success,
-            syncResult.MainConnectionName,
-            string.Join(",", syncResult.TargetsSynced),
-            syncResult.SuccessfulTables,
-            syncResult.FailedTables,
-            syncResult.ErrorMessage);
-
-        var serverReports = BuildServerReports(connectivity, syncResult);
-
-        var successMessage = syncResult.Success
-            ? $"Database sync successfully completed. Main='{syncResult.MainConnectionName}', Targets={string.Join(", ", syncResult.TargetsSynced)}, Tables OK={syncResult.SuccessfulTables}."
-            : $"Database sync finished with errors. {syncResult.ErrorMessage} Tables OK={syncResult.SuccessfulTables}, Failed={syncResult.FailedTables}.";
-
-        await _statusStore.WriteAsync(new SyncRuntimeStatus
+        status.NextScheduledRunUtc = settings.ScheduledSyncEnabled
+            ? SyncSchedulePlanner.GetNextRunUtc(settings.Schedules, now, zone, grace, status.FiredScheduleOccurrences)
+            : null;
+        if (settings.IntervalSyncEnabled)
         {
-            State = syncResult.Success ? "Succeeded" : "Failed",
-            Message = successMessage,
-            MainConnectionName = syncResult.MainConnectionName,
-            TargetsSynced = syncResult.TargetsSynced,
-            SuccessfulTables = syncResult.SuccessfulTables,
-            FailedTables = syncResult.FailedTables,
-            StartedAtUtc = syncResult.StartedAtUtc,
-            FinishedAtUtc = syncResult.FinishedAtUtc,
-            Servers = serverReports
-        }, cancellationToken).ConfigureAwait(false);
-    }
-
-    private List<ServerSyncReport> BuildIdleServerReports(string outcome, string reason) =>
-        _connectionFactory.GetEnabledConnections()
-            .Select(c => new ServerSyncReport
-            {
-                ConnectionId = c.Id,
-                Name = c.Name,
-                Server = c.Server,
-                Database = c.Database,
-                IsMain = c.IsMain,
-                Outcome = outcome,
-                Reason = reason
-            }).ToList();
-
-    private static List<ServerSyncReport> BuildServerReports(
-        IReadOnlyList<Core.DTOs.DatabaseConnectivityResult> connectivity,
-        Core.DTOs.SyncCycleResult syncResult)
-    {
-        var reports = new List<ServerSyncReport>();
-
-        foreach (var conn in connectivity)
+            status.NextIntervalRunUtc ??= now;
+        }
+        else
         {
-            if (conn.IsMain)
-            {
-                reports.Add(new ServerSyncReport
-                {
-                    ConnectionId = conn.ConnectionId,
-                    Name = conn.ConnectionName,
-                    Server = conn.Server,
-                    Database = conn.Database,
-                    IsMain = true,
-                    Outcome = conn.IsSuccessful ? "Source" : "Failed",
-                    Reason = conn.IsSuccessful
-                        ? "Main source database. Data is copied from here to targets."
-                        : $"Main database unreachable: {conn.ErrorMessage}"
-                });
-                continue;
-            }
-
-            if (!conn.IsSuccessful)
-            {
-                reports.Add(new ServerSyncReport
-                {
-                    ConnectionId = conn.ConnectionId,
-                    Name = conn.ConnectionName,
-                    Server = conn.Server,
-                    Database = conn.Database,
-                    IsMain = false,
-                    Outcome = "Failed",
-                    Reason = $"Could not connect: {conn.ErrorMessage}"
-                });
-                continue;
-            }
-
-            var tableResults = syncResult.TableResults
-                .Where(t => t.TargetConnectionId == conn.ConnectionId)
-                .ToList();
-
-            if (tableResults.Count == 0)
-            {
-                var syncedByName = syncResult.TargetsSynced.Contains(conn.ConnectionName);
-                reports.Add(new ServerSyncReport
-                {
-                    ConnectionId = conn.ConnectionId,
-                    Name = conn.ConnectionName,
-                    Server = conn.Server,
-                    Database = conn.Database,
-                    IsMain = false,
-                    Outcome = syncedByName ? "Synced" : "Skipped",
-                    Reason = syncedByName
-                        ? "Target reached, but no table results were recorded."
-                        : (syncResult.ErrorMessage ?? "Target was skipped during sync.")
-                });
-                continue;
-            }
-
-            var ok = tableResults.Count(t => t.Success);
-            var failed = tableResults.Count(t => !t.Success);
-            var firstError = tableResults.FirstOrDefault(t => !t.Success)?.ErrorMessage;
-
-            reports.Add(new ServerSyncReport
-            {
-                ConnectionId = conn.ConnectionId,
-                Name = conn.ConnectionName,
-                Server = conn.Server,
-                Database = conn.Database,
-                IsMain = false,
-                Outcome = failed == 0 ? "Synced" : "Failed",
-                TablesOk = ok,
-                TablesFailed = failed,
-                Reason = failed == 0
-                    ? $"All {ok} tables synchronised successfully."
-                    : $"Failed tables: {failed}/{tableResults.Count}. First error: {firstError}"
-            });
+            status.NextIntervalRunUtc = null;
         }
 
-        return reports;
+        PruneOccurrences(status, now);
+        await _statusStore.WriteAsync(status, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ConsumeOccurrencesAsync(
+        SyncSettings settings,
+        IReadOnlyList<ScheduleHit> due,
+        bool advanceInterval,
+        DateTimeOffset now,
+        TimeZoneInfo zone,
+        TimeSpan grace,
+        CancellationToken cancellationToken)
+    {
+        var status = _statusStore.Get();
+        status.FiredScheduleOccurrences ??= new Dictionary<string, DateTimeOffset>();
+        foreach (var hit in due)
+        {
+            status.FiredScheduleOccurrences[hit.OccurrenceKey] = hit.OccurrenceUtc;
+            _logger.LogInformation(
+                "Schedule occurrence {Occurrence} ({Description}) was consumed by the cycle that just started.",
+                hit.OccurrenceKey,
+                hit.Description);
+        }
+
+        if (advanceInterval && settings.IntervalSyncEnabled)
+        {
+            status.NextIntervalRunUtc = IntervalSchedule.After(now, settings.IntervalValue, settings.IntervalUnit);
+            _logger.LogInformation(
+                "Next interval sync is {NextIntervalUtc:u}. Missed interval ticks are not replayed.",
+                status.NextIntervalRunUtc);
+        }
+
+        status.NextScheduledRunUtc = settings.ScheduledSyncEnabled
+            ? SyncSchedulePlanner.GetNextRunUtc(settings.Schedules, now, zone, grace, status.FiredScheduleOccurrences)
+            : null;
+        PruneOccurrences(status, now);
+        await _statusStore.WriteAsync(status, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task AdvanceIntervalAsync(SyncSettings settings, DateTimeOffset nextUtc, CancellationToken cancellationToken)
+    {
+        if (!settings.IntervalSyncEnabled)
+        {
+            return;
+        }
+
+        var status = _statusStore.Get();
+        if (status.State == "Running")
+        {
+            _logger.LogInformation(
+                "Interval trigger skipped while another sync is running. Next interval is held until {NextIntervalUtc:u} and the missed tick is not replayed.",
+                nextUtc);
+            return;
+        }
+
+        status.NextIntervalRunUtc = nextUtc;
+        _logger.LogWarning(
+            "Interval sync skipped because a sync is already running. Next interval at {NextIntervalUtc:u}.",
+            status.NextIntervalRunUtc);
+        await _statusStore.WriteAsync(status, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RecordSkipAsync(SyncTriggerKind trigger, string message, CancellationToken cancellationToken)
+    {
+        var status = _statusStore.Get();
+        if (status.State == "Running")
+        {
+            return;
+        }
+
+        status.LastSkippedTrigger = trigger.ToString();
+        status.LastSkipReason = message;
+        status.LastSkippedAtUtc = DateTimeOffset.UtcNow;
+        await _statusStore.WriteAsync(status, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void PruneOccurrences(SyncRuntimeStatus status, DateTimeOffset now)
+    {
+        if (status.FiredScheduleOccurrences is null || status.FiredScheduleOccurrences.Count == 0)
+        {
+            return;
+        }
+
+        var cutoff = now.AddDays(-14);
+        var stale = status.FiredScheduleOccurrences
+            .Where(pair => pair.Value < cutoff)
+            .Select(pair => pair.Key)
+            .ToList();
+        foreach (var key in stale)
+        {
+            status.FiredScheduleOccurrences.Remove(key);
+        }
     }
 }

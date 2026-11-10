@@ -10,6 +10,7 @@ builder.WebHost.UseUrls(builder.Configuration["Urls"] ?? "http://0.0.0.0:5088");
 
 builder.Services.AddRazorPages();
 builder.Services.AddSingleton<IWorkerServiceControl, WorkerServiceControl>();
+builder.Services.AddSingleton<ManualSyncHost>();
 builder.Services.AddDatabaseSyncInfrastructure(builder.Configuration);
 
 var app = builder.Build();

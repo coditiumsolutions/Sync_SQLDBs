@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DatabaseSync.Core.Interfaces;
 using DatabaseSync.Core.Models;
+using DatabaseSync.Core.Scheduling;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -56,6 +57,7 @@ public sealed class SyncConfigStore : ISyncConfigStore
             if (!File.Exists(_filePath))
             {
                 var empty = CreateDefault();
+                Normalize(empty);
                 await WriteFileAsync(empty, cancellationToken).ConfigureAwait(false);
                 _cache = Clone(empty);
                 _cacheWriteTimeUtc = File.GetLastWriteTimeUtc(_filePath);
@@ -68,14 +70,25 @@ public sealed class SyncConfigStore : ISyncConfigStore
                 return Clone(_cache);
             }
 
-            await using var stream = File.OpenRead(_filePath);
-            var config = await JsonSerializer
-                .DeserializeAsync<SyncConfiguration>(stream, JsonOptions, cancellationToken)
-                .ConfigureAwait(false) ?? CreateDefault();
+            SyncConfiguration config;
+            await using (var stream = File.OpenRead(_filePath))
+            {
+                config = await JsonSerializer
+                    .DeserializeAsync<SyncConfiguration>(stream, JsonOptions, cancellationToken)
+                    .ConfigureAwait(false) ?? CreateDefault();
+            }
 
-            Normalize(config);
+            if (Normalize(config))
+            {
+                await WriteFileAsync(config, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation(
+                    "Migrated sync trigger settings in {ConfigPath} to version {Version}. EnableSynchronization and SyncIntervalSeconds are legacy mirrors and are not used to start cycles.",
+                    _filePath,
+                    config.SyncSettings.TriggerConfigVersion);
+            }
+
             _cache = Clone(config);
-            _cacheWriteTimeUtc = writeTime;
+            _cacheWriteTimeUtc = File.GetLastWriteTimeUtc(_filePath);
             return Clone(_cache);
         }
         finally
@@ -122,10 +135,12 @@ public sealed class SyncConfigStore : ISyncConfigStore
         File.Delete(tempPath);
     }
 
-    private static void Normalize(SyncConfiguration configuration)
+    /// <returns>True when trigger settings were migrated and the file should be saved.</returns>
+    private static bool Normalize(SyncConfiguration configuration)
     {
         configuration.Connections ??= [];
         configuration.SyncSettings ??= new SyncSettings();
+        var migrated = SyncSettingsMigrator.Apply(configuration.SyncSettings);
 
         foreach (var connection in configuration.Connections)
         {
@@ -147,13 +162,18 @@ public sealed class SyncConfigStore : ISyncConfigStore
                 mains[i].IsMain = false;
             }
         }
+
+        return migrated;
     }
 
     private static SyncConfiguration CreateDefault() => new()
     {
         SyncSettings = new SyncSettings
         {
+            TriggerConfigVersion = SyncSettingsMigrator.CurrentVersion,
             EnableSynchronization = false,
+            IntervalSyncEnabled = false,
+            ScheduledSyncEnabled = false,
             SyncMainToOthers = true,
             AutoSyncEveryMinutes = 2,
             AutoSyncStartTime = "00:00",

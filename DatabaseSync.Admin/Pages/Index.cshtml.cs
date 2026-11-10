@@ -1,6 +1,7 @@
 using DatabaseSync.Admin.Services;
 using DatabaseSync.Core.Interfaces;
 using DatabaseSync.Core.Models;
+using DatabaseSync.Core.Scheduling;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -12,17 +13,20 @@ public class IndexModel : PageModel
     private readonly IDatabaseConnectionService _connectionService;
     private readonly IWorkerServiceControl _workerServiceControl;
     private readonly ISyncStatusStore _statusStore;
+    private readonly ManualSyncHost _manualSyncHost;
 
     public IndexModel(
         ISyncConfigStore configStore,
         IDatabaseConnectionService connectionService,
         IWorkerServiceControl workerServiceControl,
-        ISyncStatusStore statusStore)
+        ISyncStatusStore statusStore,
+        ManualSyncHost manualSyncHost)
     {
         _configStore = configStore;
         _connectionService = connectionService;
         _workerServiceControl = workerServiceControl;
         _statusStore = statusStore;
+        _manualSyncHost = manualSyncHost;
     }
 
     public SyncConfiguration Configuration { get; private set; } = new();
@@ -41,7 +45,48 @@ public class IndexModel : PageModel
     public IActionResult OnGetSyncStatus()
     {
         var status = _statusStore.Get();
-        return new JsonResult(status);
+        var settings = _configStore.Get().SyncSettings;
+        var now = DateTimeOffset.UtcNow;
+        var zone = TimeZoneInfo.Local;
+        var grace = TimeSpan.FromMinutes(settings.ScheduleGraceMinutes);
+        return new JsonResult(new
+        {
+            status.State,
+            status.Message,
+            status.Trigger,
+            status.LastTrigger,
+            status.DryRun,
+            status.RowsInserted,
+            status.RowsUpdated,
+            status.RowsDeleted,
+            status.RowsConflicted,
+            status.EstimatedBytesTransferred,
+            status.LastRunStartedUtc,
+            status.LastRunFinishedUtc,
+            status.LastManualRunUtc,
+            status.LastScheduledRunUtc,
+            status.LastIntervalRunUtc,
+            status.LastSkippedTrigger,
+            status.LastSkipReason,
+            status.LastSkippedAtUtc,
+            NextScheduledRunUtc = settings.ScheduledSyncEnabled
+                ? SyncSchedulePlanner.GetNextRunUtc(settings.Schedules, now, zone, grace, status.FiredScheduleOccurrences)
+                : null,
+            NextIntervalRunUtc = settings.IntervalSyncEnabled
+                ? status.NextIntervalRunUtc ?? now
+                : (DateTimeOffset?)null,
+            status.Servers,
+            ScheduledSyncEnabled = settings.ScheduledSyncEnabled,
+            IntervalSyncEnabled = settings.IntervalSyncEnabled
+        });
+    }
+
+    public IActionResult OnPostSyncNow()
+    {
+        _manualSyncHost.Queue();
+        TempData["StatusMessage"] =
+            "Manual sync requested. It starts immediately unless another sync is running, in which case it runs once when that cycle finishes.";
+        return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostStartServiceAsync()

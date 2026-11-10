@@ -27,6 +27,8 @@ public static class DependencyInjection
         services.AddSingleton<ISchemaDiscoveryService, SchemaDiscoveryService>();
         services.AddSingleton<ITableSyncService, TableSyncService>();
         services.AddSingleton<ISyncOrchestrator, SyncOrchestrator>();
+        services.AddSingleton<IManualSyncRequestStore, ManualSyncRequestStore>();
+        services.AddSingleton<ISyncCycleRunner, SyncCycleRunner>();
 
         return services;
     }
