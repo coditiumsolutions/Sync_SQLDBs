@@ -80,11 +80,14 @@ public sealed class SyncSettings
     /// </summary>
     public bool DryRun { get; set; }
 
-    /// <summary>SqlBulkCopy batch size for primary-key fingerprints.</summary>
-    public int FingerprintBatchSize { get; set; } = 5000;
+    /// <summary>SqlBulkCopy batch size inside the single primary-key and hash stream.</summary>
+    public int FingerprintBatchSize { get; set; } = 10000;
 
-    /// <summary>How many differing keys are applied in one batch.</summary>
-    public int DiffApplyBatchSize { get; set; } = 400;
+    /// <summary>
+    /// How many differing keys are applied in one local batch. Capped at 4,000 so a batch does not escalate locks.
+    /// This is not the comparison protocol.
+    /// </summary>
+    public int DiffApplyBatchSize { get; set; } = 4000;
 
     /// <summary>
     /// Conflict count at or below this (and <see cref="ConflictFileMaxBytes"/>) is written as one JSON review file.

@@ -96,11 +96,12 @@ After migration the legacy fields are mirrors only (`EnableSynchronization` is t
 
 For each user table that has a primary key, ordered parent-first:
 
-1. Hash every copyable non-key column on Main and on the target (`SHA2_256`). Primary keys, computed columns, and `rowversion`/`timestamp` are not part of the hash. `NULL` hashes to a marker, not to the same value as an empty string. Column hashes are folded in groups of 128 so the outer hash stays small.
-2. Ship only the Main primary key and 32-byte hash to a temp table on the target. The target hashes its own rows locally. The comparison is a SQL join, so primary-key collation stays correct.
-3. Keys only on Main are inserts. Keys on both sides with a different hash are updates. Keys only on the target are deletes.
-4. Full rows are read and written only for those keys, in batches (`DiffApplyBatchSize`). Deletes send keys only.
-5. An empty target is treated as “every Main row is an insert” and skips the fingerprint round trip.
+1. A single integer primary key is compared in ranges, on the servers. Both sides run one grouped checksum query. Ranges that match are not read again, so a no-change table sends a few dozen bytes and no row payload. A mismatched range wider than 2,000 keys is split, and only the slices that still differ continue.
+2. Each mismatched slice is read from both servers in one query: primary key plus an 8-byte `BINARY_CHECKSUM` / `CHECKSUM` pair. The worker classifies that list in memory (missing, equal, different) and bulk-fetches only the different keys. Materializing `SHA-256` for every row in the slice, then bulk-copying it onto the target for a join, was slower on this link than copying the rows and no smaller for these narrow tables. Tables whose primary key is not a single integer still do that staged join: one `SqlBulkCopy` of `(primary key, SHA-256)` into a temp table, one local hash, one join. Unchanged rows are not written. A clustered 10% change therefore moves the checksum list for the dirty slices and about that many full rows, in one or two bulk fetches.
+3. The hash is `HASHBYTES('SHA2_256', …)` over the copyable non-key columns in ordinal order. Columns are concatenated with `NCHAR(30)` between them. `NULL` is `NCHAR(0)`. A value is `NCHAR(1)`, its character length, and a canonical text form (ISO dates, hex for binary), so an empty value is not the same hash as `NULL` and adjacent columns cannot blur. Primary keys, computed columns, and `rowversion` are excluded. The hash is computed in the `SELECT`. No persisted hash column is added.
+4. Full rows move only for keys the join marked insert or update, then one `MERGE`. Deletes send keys only. Apply batches are about 4,000 rows (`DiffApplyBatchSize`, capped there) so the target does not escalate locks. That chunking is local. It is not how the comparison talks to the network.
+5. An empty target is treated as “every Main row is an insert” and skips the fingerprint stream.
+6. Interval cycles remember the source's max change timestamp and `rowversion` in the worker process. The next interval cycles hash only source rows newer than that watermark, which keeps a quiet cycle from shipping the whole key list. Deletes are invisible to a watermark, so every 6th interval cycle is a full hash. Manual and scheduled cycles are always a full hash. Restarting the worker forgets the watermark and the next interval cycle is a full hash.
 
 Tables **without a primary key are skipped** with a warning. They are not copied. A table whose rows cannot be identified cannot be updated safely.
 
