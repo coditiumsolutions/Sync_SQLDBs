@@ -1,0 +1,62 @@
+Connectivity (password redacted):
+  MAIN Main Cloud 172.20.228.2 db=RND_PMS_Sync FAIL TCP 1433 failed: OperationCanceledException
+  TARGET Cloud Server 138.201.247.223 db=RND_PMS_Sync OK SQL login ok, database=RND_PMS_Sync
+  TARGET Cloud Server 2 46.224.116.233 db=RND_PMS_Sync OK SQL login ok, database=RND_PMS_Sync
+MAIN 172.20.228.2 is not reachable. Using Cloud Server as the stand-in main and Cloud Server 2 as the only target.
+Seeding bench tables for 10k
+RUN size=10k scenario=initial engine=old repeat=1
+  elapsed=20169ms bytes=500000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=initial engine=old repeat=2
+  elapsed=20418ms bytes=500000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=initial engine=old repeat=3
+  elapsed=20346ms bytes=500000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=initial engine=new repeat=1
+  elapsed=16955ms bytes=1255000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=initial engine=new repeat=2
+  elapsed=17042ms bytes=1255000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=initial engine=new repeat=3
+  elapsed=22518ms bytes=1255000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=steady engine=old repeat=1
+  elapsed=19544ms bytes=500000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=steady engine=old repeat=2
+  elapsed=19733ms bytes=500000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=steady engine=old repeat=3
+  elapsed=20106ms bytes=500000 rowsRead=13000 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=steady engine=new repeat=1
+  elapsed=38618ms bytes=508000 rowsRead=13000 rowsWritten=0 match=True conflicts=0 success=True 
+RUN size=10k scenario=steady engine=new repeat=2
+  elapsed=38642ms bytes=508000 rowsRead=13000 rowsWritten=0 match=True conflicts=0 success=True 
+RUN size=10k scenario=steady engine=new repeat=3
+  elapsed=38205ms bytes=508000 rowsRead=13000 rowsWritten=0 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-1pct engine=old repeat=1
+  elapsed=19846ms bytes=501153 rowsRead=13030 rowsWritten=13130 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-1pct engine=old repeat=2
+  elapsed=19531ms bytes=501153 rowsRead=13030 rowsWritten=13130 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-1pct engine=old repeat=3
+  elapsed=26149ms bytes=501153 rowsRead=13030 rowsWritten=13130 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-1pct engine=new repeat=1
+  elapsed=55534ms bytes=534980 rowsRead=13030 rowsWritten=360 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-1pct engine=new repeat=2
+  elapsed=56672ms bytes=534980 rowsRead=13030 rowsWritten=360 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-1pct engine=new repeat=3
+  elapsed=57874ms bytes=534980 rowsRead=13030 rowsWritten=360 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-10pct engine=old repeat=1
+  elapsed=20521ms bytes=511538 rowsRead=13300 rowsWritten=14300 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-10pct engine=old repeat=2
+  elapsed=20987ms bytes=511538 rowsRead=13300 rowsWritten=14300 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-10pct engine=old repeat=3
+  elapsed=19841ms bytes=511538 rowsRead=13300 rowsWritten=14300 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-10pct engine=new repeat=1
+  elapsed=96917ms bytes=777800 rowsRead=13300 rowsWritten=3600 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-10pct engine=new repeat=2
+  elapsed=88448ms bytes=777800 rowsRead=13300 rowsWritten=3600 match=True conflicts=0 success=True 
+RUN size=10k scenario=delta-10pct engine=new repeat=3
+  elapsed=88038ms bytes=777800 rowsRead=13300 rowsWritten=3600 match=True conflicts=0 success=True 
+RUN size=10k scenario=conflicts engine=old repeat=1
+  elapsed=19674ms bytes=495192 rowsRead=12875 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=conflicts engine=old repeat=2
+  elapsed=19889ms bytes=495192 rowsRead=12875 rowsWritten=13000 match=True conflicts=0 success=True 
+RUN size=10k scenario=conflicts engine=old repeat=3
+Benchmark stopped: InvalidOperationException Prep sync failed: bench.Customer: Execution Timeout Expired.  The timeout period elapsed prior to completion of the operation or the server is not responding. A transport-level error has occurred when receiving results from the server. (provider: TCP Provider, error: 35 - An internal exception was caught)
+bench schema dropped on both servers. Report: benchmarks/results/REPORT.md
+EXIT:0

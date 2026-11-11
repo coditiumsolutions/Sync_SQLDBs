@@ -1,4 +1,5 @@
 using DatabaseSync.Core.DTOs;
+using DatabaseSync.Core.Enums;
 
 namespace DatabaseSync.Core.Interfaces;
 
@@ -7,5 +8,5 @@ namespace DatabaseSync.Core.Interfaces;
 /// </summary>
 public interface ISyncOrchestrator
 {
-    Task<SyncCycleResult> RunAsync(CancellationToken cancellationToken = default);
+    Task<SyncCycleResult> RunAsync(SyncTriggerKind trigger, CancellationToken cancellationToken = default);
 }

@@ -1,15 +1,41 @@
 {
   "SyncSettings": {
+    "TriggerConfigVersion": 1,
+    "EnableSynchronization": false,
     "SyncIntervalSeconds": 120,
     "AutoSyncEveryMinutes": 2,
     "AutoSyncStartTime": "00:00",
     "AutoSyncEndTime": "23:59",
-    "EnableSynchronization": false,
+    "TriggerPollSeconds": 5,
+    "ScheduleGraceMinutes": 15,
+    "ScheduledSyncEnabled": false,
+    "Schedules": [
+      {
+        "Id": "weekday-morning",
+        "Enabled": true,
+        "Time": "09:00",
+        "DaysOfWeek": [ "Monday", "Tuesday", "Wednesday", "Thursday", "Friday" ],
+        "Cron": null
+      }
+    ],
+    "IntervalSyncEnabled": false,
+    "IntervalValue": 2,
+    "IntervalUnit": "Minutes",
     "RetryIntervalSeconds": 15,
     "MaximumRetryAttempts": 2,
     "EnableDetailedLogging": true,
     "CommandTimeoutSeconds": 180,
-    "SyncMainToOthers": true
+    "SyncMainToOthers": true,
+    "DryRun": false,
+    "FingerprintBatchSize": 10000,
+    "DiffApplyBatchSize": 4000,
+    "ConflictFileRowThreshold": 1000,
+    "ConflictFileMaxBytes": 5000000,
+    "UseConflictBackupTables": false,
+    "WriteConflictLogTable": false,
+    "ConflictBackupFolder": "Conflicts",
+    "AssumeDifferingRowsConflict": false,
+    "ChangeTimestampColumnNames": []
   },
   "Connections": [
     {

@@ -40,20 +40,32 @@
                 }
             </div>
             <div class="form-hint mt-1">
-                Auto timing:
-                every <strong>@(settings.AutoSyncEveryMinutes > 0 ? settings.AutoSyncEveryMinutes : Math.Max(1, settings.SyncIntervalSeconds / 60))</strong> min,
-                window <strong>@settings.AutoSyncStartTime</strong> - <strong>@settings.AutoSyncEndTime</strong>
+                Scheduled sync: <strong>@(settings.ScheduledSyncEnabled ? "ON" : "OFF")</strong>
+                · Interval sync: <strong>@(settings.IntervalSyncEnabled ? $"ON every {settings.IntervalValue} {settings.IntervalUnit}" : "OFF")</strong>
+                · Dry run: <strong>@(settings.DryRun ? "ON" : "OFF")</strong>
                 (<a asp-page="/Settings">change</a>)
+            </div>
+            <div class="form-hint mt-1">
+                The worker must be running for scheduled and interval sync. Sync now runs once even when those modes are off.
             </div>
             <div class="form-hint mt-2">
                 Last sync:
                 <strong id="syncStateText">@Model.SyncStatus.State</strong>
+                <span id="syncTriggerText">@(string.IsNullOrWhiteSpace(Model.SyncStatus.LastTrigger) ? "" : $" ({Model.SyncStatus.LastTrigger})")</span>
                 <span id="syncMessageText">— @Model.SyncStatus.Message</span>
+            </div>
+            <div class="form-hint mt-1" id="syncClockText">
+                Last run: @(Model.SyncStatus.LastRunFinishedUtc?.ToLocalTime().ToString("g") ?? "—")
+                · Next scheduled: <span id="nextScheduledText">@(settings.ScheduledSyncEnabled ? "see status" : "off")</span>
+                · Next interval: <span id="nextIntervalText">@(settings.IntervalSyncEnabled ? "see status" : "off")</span>
             </div>
         </div>
         <div class="d-flex gap-2">
+            <form method="post" asp-page-handler="SyncNow">
+                <button type="submit" class="btn btn-accent">Sync now</button>
+            </form>
             <form method="post" asp-page-handler="StartService">
-                <button type="submit" class="btn btn-accent" disabled="@(!canStart)">Run sync service</button>
+                <button type="submit" class="btn btn-outline-secondary" disabled="@(!canStart)">Run sync service</button>
             </form>
             <form method="post" asp-page-handler="StopService">
                 <button type="submit" class="btn btn-outline-danger" disabled="@(!canStop)">Stop sync service</button>
@@ -79,7 +91,7 @@
             @if (Model.SyncStatus.Servers.Count == 0)
             {
                 <tr>
-                    <td colspan="5" class="text-muted">No sync results yet. Click Run sync service.</td>
+                    <td colspan="5" class="text-muted">No sync results yet. Click Sync now.</td>
                 </tr>
             }
             else
@@ -133,9 +145,18 @@
 (function () {
     const banner = document.getElementById('syncResultBanner');
     const stateText = document.getElementById('syncStateText');
+    const triggerText = document.getElementById('syncTriggerText');
     const messageText = document.getElementById('syncMessageText');
+    const nextScheduledText = document.getElementById('nextScheduledText');
+    const nextIntervalText = document.getElementById('nextIntervalText');
     const body = document.getElementById('serverResultsBody');
     let notifiedSuccessKey = sessionStorage.getItem('syncSuccessKey') || '';
+
+    function formatTime(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+    }
 
     function escapeHtml(value) {
         return (value || '').toString()
@@ -147,7 +168,7 @@
 
     function renderServers(servers) {
         if (!servers || servers.length === 0) {
-            body.innerHTML = '<tr><td colspan="5" class="text-muted">No sync results yet. Click Run sync service.</td></tr>';
+            body.innerHTML = '<tr><td colspan="5" class="text-muted">No sync results yet. Click Sync now.</td></tr>';
             return;
         }
 
@@ -172,7 +193,10 @@
             const status = await response.json();
 
             stateText.textContent = status.state || 'Idle';
+            triggerText.textContent = status.lastTrigger ? (' (' + status.lastTrigger + ')') : '';
             messageText.textContent = status.message ? (' — ' + status.message) : '';
+            nextScheduledText.textContent = status.scheduledSyncEnabled ? formatTime(status.nextScheduledRunUtc) : 'off';
+            nextIntervalText.textContent = status.intervalSyncEnabled ? formatTime(status.nextIntervalRunUtc) : 'off';
             renderServers(status.servers || []);
 
             const key = (status.finishedAtUtc || '') + '|' + (status.state || '');

@@ -38,7 +38,9 @@ public sealed class SchemaDiscoveryService : ISchemaDiscoveryService
             FROM sys.tables t
             INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
             WHERE t.is_ms_shipped = 0
-              AND t.name NOT LIKE '\_\_SyncStaging%' ESCAPE '\'
+              AND s.name NOT IN (N'sync')
+              AND t.name NOT LIKE '\_\_Sync%' ESCAPE '\'
+              AND t.name NOT LIKE 'ConflictBackup[_]%'
             ORDER BY s.name, t.name;
             """;
 
