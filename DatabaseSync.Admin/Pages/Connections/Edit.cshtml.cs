@@ -142,11 +142,17 @@ public class EditModel : PageModel
 
         public void ApplyTo(SyncConnection connection)
         {
+            var server = Server.Trim();
+            var database = Database.Trim();
+            var endpointChanged =
+                !string.Equals(connection.Server, server, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(connection.Database, database, StringComparison.OrdinalIgnoreCase);
+
             connection.Name = Name.Trim();
             connection.IsMain = IsMain;
             connection.IsEnabled = IsEnabled;
-            connection.Server = Server.Trim();
-            connection.Database = Database.Trim();
+            connection.Server = server;
+            connection.Database = database;
             connection.IntegratedSecurity = IntegratedSecurity;
             connection.UserId = UserId?.Trim();
             connection.Password = Password;
@@ -154,6 +160,11 @@ public class EditModel : PageModel
             connection.Encrypt = Encrypt;
             connection.TrustServerCertificate = TrustServerCertificate;
             connection.ApplicationName = "Coditium.DatabaseSync";
+
+            if (endpointChanged)
+            {
+                connection.ClearLastConnectivity();
+            }
         }
     }
 }

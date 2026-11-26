@@ -69,7 +69,7 @@ Overlap rules:
 - If a manual or scheduled cycle starts while an interval tick is already due, that tick is consumed so interval sync does not start again immediately.
 - The worker must be running for scheduled and interval sync. **Sync now** runs in the Admin process when it can take the lock, so it still works when the worker is stopped.
 
-The dashboard shows which trigger started the current or last cycle, plus the last and next run times.
+The desk shows the manual **Sync now** button, live progress, which trigger started the current or last cycle, row counts, and the last and next run times. Auto times and the interval (value, unit, and the off-by-default arm switch) are edited on Triggers. The Conflicts page reads `conflict-log.jsonl` and the JSON or JSONL backups in the conflict folder. It does not open `sync.ConflictLog` or backup tables on the target.
 
 ### Schedules
 
@@ -149,7 +149,7 @@ Foreign keys on the target are set to `NOCHECK` for the duration of that target'
 ```powershell
 dotnet restore
 dotnet build
-dotnet test DatabaseSync.Core.Tests
+dotnet test
 dotnet run --project DatabaseSync.Worker
 dotnet run --project DatabaseSync.Admin
 ```

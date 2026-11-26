@@ -1,0 +1,157 @@
+@page
+@model DatabaseSync.Admin.Pages.ConflictsModel
+@{
+    ViewData["Title"] = "Conflicts";
+    var review = Model.Review;
+    string When(DateTimeOffset? value) => value?.ToLocalTime().ToString("g") ?? "—";
+    string Size(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024d:0.#} KB";
+        return $"{bytes / 1024d / 1024d:0.##} MB";
+    }
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow"><partial name="_Icon" model='"conflicts"' /> Review</p>
+        <h1>Conflicts</h1>
+        <p class="lede">A flagged row was newer on the target. It was backed up, then main's data was applied. This page reads <span class="mono">conflict-log.jsonl</span> and the JSON backups beside it. It does not open tables on the target, and it does not change review status.</p>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(review.Warning))
+{
+    <div class="alert alert-danger" role="alert">
+        <partial name="_Icon" model='"alert"' />
+        <span>@review.Warning</span>
+    </div>
+}
+
+<ul class="figures">
+    <li>
+        <span class="fig-num">@review.PendingCount</span>
+        <small><partial name="_Icon" model='"pending"' /> Pending in view</small>
+    </li>
+    <li>
+        <span class="fig-num">@review.Entries.Count</span>
+        <small><partial name="_Icon" model='"log"' /> Log rows shown</small>
+    </li>
+    <li>
+        <span class="fig-num">@review.Files.Count</span>
+        <small><partial name="_Icon" model='"file"' /> Backup files</small>
+    </li>
+</ul>
+
+<section class="section">
+    <p class="eyebrow"><partial name="_Icon" model='"log"' /> Log</p>
+    <h2>Flagged rows</h2>
+    @if (!review.LogFound)
+    {
+        <p class="empty">No conflict log yet. It appears in the backup folder after a cycle flags a row.</p>
+    }
+    else if (review.Entries.Count == 0)
+    {
+        <p class="empty">The log is there and has no readable rows.</p>
+    }
+    else
+    {
+        @if (review.Truncated)
+        {
+            <p class="hint">Showing the newest rows in the recent log, not the whole history.</p>
+        }
+        <div class="table-wrap">
+        <table class="ledger-table">
+            <thead>
+            <tr>
+                <th>When</th>
+                <th>Target / table</th>
+                <th>Key</th>
+                <th>Change</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var entry in review.Entries)
+            {
+                <tr>
+                    <td class="mono">@When(entry.LoggedAtUtc)</td>
+                    <td>
+                        <strong>@entry.Target</strong>
+                        <div class="mono muted">@entry.Table</div>
+                    </td>
+                    <td class="mono">@entry.Key</td>
+                    <td>
+                        @entry.Operation
+                        <span class="muted">@entry.Trigger</span>
+                        @if (entry.DryRun)
+                        {
+                            <span class="pill off">
+                                <partial name="_Icon" model='"dry"' />
+                                <span>Dry run</span>
+                            </span>
+                        }
+                        <div class="hint">Target @((entry.TargetChangeTimestamp ?? "—")) · Main @((entry.MainChangeTimestamp ?? "—"))</div>
+                        @if (!string.IsNullOrWhiteSpace(entry.Preview))
+                        {
+                            <div class="hint">@entry.Preview</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(entry.BackupFile))
+                        {
+                            <div class="mono muted">@entry.BackupFile</div>
+                        }
+                    </td>
+                    <td>
+                        <span class="pill @(entry.ReviewStatus.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "bad" : "on")">
+                            <partial name="_Icon" model='@(entry.ReviewStatus.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "pending" : "check")' />
+                            <span>@entry.ReviewStatus</span>
+                        </span>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    }
+</section>
+
+<section class="section">
+    <p class="eyebrow"><partial name="_Icon" model='"folder"' /> Files</p>
+    <h2>Backups</h2>
+    <p class="hint">Folder <span class="mono">@review.Folder</span>. A small set is one JSON file. A large set is JSONL, or a <span class="mono">sync.ConflictBackup_*</span> table on the target when that option is on. Tables are not listed here.</p>
+    @if (review.Files.Count == 0)
+    {
+        <p class="empty">No JSON or JSONL backups in that folder.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+        <table class="ledger-table">
+            <thead>
+            <tr>
+                <th>File</th>
+                <th>Kind</th>
+                <th>Size</th>
+                <th>Written</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var file in review.Files)
+            {
+                <tr>
+                    <td class="mono">
+                        <span class="file-cell">
+                            <svg class="ico" aria-hidden="true"><use href="#ico-file"></use></svg>
+                            <span>@file.RelativePath</span>
+                        </span>
+                    </td>
+                    <td>@file.Kind</td>
+                    <td class="mono">@Size(file.Bytes)</td>
+                    <td class="mono">@When(file.ModifiedUtc)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    }
+</section>

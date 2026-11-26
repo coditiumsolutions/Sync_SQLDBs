@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using DatabaseSync.Core.Enums;
+
 namespace DatabaseSync.Core.Models;
 
 /// <summary>
@@ -33,4 +36,25 @@ public sealed class SyncConnection
     public bool TrustServerCertificate { get; set; } = true;
 
     public string ApplicationName { get; set; } = "Coditium.DatabaseSync";
+
+    /// <summary>Last Admin UI connectivity probe. Unknown until a test has run.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public ConnectionStatus LastConnectivityStatus { get; set; } = ConnectionStatus.Unknown;
+
+    public DateTimeOffset? LastConnectivityCheckedAtUtc { get; set; }
+
+    public long? LastConnectivityElapsedMs { get; set; }
+
+    public string? LastConnectivityServerVersion { get; set; }
+
+    public string? LastConnectivityError { get; set; }
+
+    public void ClearLastConnectivity()
+    {
+        LastConnectivityStatus = ConnectionStatus.Unknown;
+        LastConnectivityCheckedAtUtc = null;
+        LastConnectivityElapsedMs = null;
+        LastConnectivityServerVersion = null;
+        LastConnectivityError = null;
+    }
 }

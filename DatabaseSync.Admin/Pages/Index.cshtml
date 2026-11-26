@@ -1,161 +1,330 @@
 ﻿@page
 @model DatabaseSync.Admin.Pages.IndexModel
 @{
-    ViewData["Title"] = "Dashboard";
+    ViewData["Title"] = "Desk";
+    var settings = Model.Configuration.SyncSettings;
     var main = Model.Configuration.Connections.FirstOrDefault(c => c.IsMain);
     var enabled = Model.Configuration.Connections.Count(c => c.IsEnabled);
     var targets = Model.Configuration.Connections.Count(c => c.IsEnabled && !c.IsMain);
-    var canStart = Model.ServiceStatus.CanStart;
-    var canStop = Model.ServiceStatus.CanStop;
-    var settings = Model.Configuration.SyncSettings;
+    var status = Model.SyncStatus;
+    string When(DateTimeOffset? value) => value?.ToLocalTime().ToString("g") ?? "—";
+    string Bytes(long value)
+    {
+        if (value < 1024) return $"{value} B";
+        if (value < 1024 * 1024) return $"{value / 1024d:0.#} KB";
+        return $"{value / 1024d / 1024d:0.##} MB";
+    }
+    string Duration()
+    {
+        if (status.LastRunStartedUtc is null || status.LastRunFinishedUtc is null) return "—";
+        var span = status.LastRunFinishedUtc.Value - status.LastRunStartedUtc.Value;
+        if (span < TimeSpan.Zero) return "—";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h {span.Minutes}m";
+        if (span.TotalMinutes >= 1) return $"{(int)span.TotalMinutes}m {span.Seconds}s";
+        return $"{Math.Max(0, span.Seconds)}s";
+    }
+    string Mark(string? outcome) => outcome is "Synced" or "Source" or "Connected" ? "mark-ok"
+        : outcome is "Failed" ? "mark-bad" : "mark-muted";
+    string OutcomeIcon(string? outcome) => outcome switch
+    {
+        "Synced" or "Connected" => "check",
+        "Source" => "source",
+        "Failed" => "x",
+        _ => "dot"
+    };
+    string StateIcon(string? state) => state switch
+    {
+        "Running" => "sync",
+        "Succeeded" => "check",
+        "Failed" => "x",
+        "Skipped" => "cancel",
+        _ => "dot"
+    };
+    string Pill(string? state) => state switch
+    {
+        "Running" => "run",
+        "Succeeded" => "on",
+        "Failed" => "bad",
+        _ => "off"
+    };
+    string Describe(DatabaseSync.Core.Models.SyncScheduleEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Cron)) return entry.Cron!;
+        var days = entry.DaysOfWeek is { Count: > 0 }
+            ? string.Join(" ", entry.DaysOfWeek.Select(day => day.Length >= 3 ? day[..3] : day))
+            : "every day";
+        return $"{entry.Time} · {days}";
+    }
+    var stateLabel = string.IsNullOrWhiteSpace(status.State) ? "Idle" : status.State;
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="page-head">
     <div>
-        <h1 class="h3 mb-1">Dashboard</h1>
-        <div class="form-hint">Config: <code class="path">@Model.ConfigPath</code></div>
+        <p class="eyebrow"><partial name="_Icon" model='"cycle"' /> Cycle control</p>
+        <h1>Desk</h1>
     </div>
-    <form method="post" asp-page-handler="TestAll">
-        <button type="submit" class="btn btn-outline-secondary">Test all connections</button>
-    </form>
+    <p class="lede">Manual runs from here. Auto and interval wait for the worker. Only one cycle holds the lock.</p>
 </div>
 
-<div id="syncResultBanner" class="alert d-none" role="alert"></div>
+@if (!Model.OneWaySyncEnabled)
+{
+    <div class="alert alert-danger" role="alert">
+        <partial name="_Icon" model='"alert"' />
+        <span>One-way sync is off in the config file, so no cycle will copy data. <a asp-page="/Settings">Turn it back on</a>.</span>
+    </div>
+}
 
-<div class="panel mb-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+<div id="syncResultBanner" class="alert banner d-none" role="status"></div>
+
+<div class="desk">
+    <section class="plate plate-manual" aria-labelledby="manual-title">
+        <div class="plate-head">
+            <div>
+                <p class="eyebrow"><partial name="_Icon" model='"manual"' /> 01 · Manual</p>
+                <h2 id="manual-title">Sync now</h2>
+            </div>
+            <span class="pill @Pill(status.State)" id="statePill">
+                <svg class="ico" aria-hidden="true" focusable="false"><use href="#ico-@StateIcon(status.State)"></use></svg>
+                <span>@stateLabel</span>
+            </span>
+        </div>
+        <p class="hint">One differential cycle. Always armed. A click during another cycle waits, then runs once.</p>
+        <form method="post" asp-page-handler="SyncNow" class="split-actions" style="margin-top:0.9rem">
+            <button type="submit" class="btn-sync" id="syncButton">
+                <partial name="_Icon" model='"sync"' />
+                <span>Sync now</span>
+            </button>
+        </form>
+        <div class="track" id="runTrack" data-state="@status.State" aria-hidden="true"><span class="track-fill"></span></div>
+        <p class="run-line" id="runMessage">@status.Message</p>
+        <dl class="meta">
+            <dt>Trigger</dt>
+            <dd id="triggerText">@(string.IsNullOrWhiteSpace(status.LastTrigger) ? "—" : status.LastTrigger)</dd>
+            <dt>Started</dt>
+            <dd id="startedText">@When(status.LastRunStartedUtc)</dd>
+            <dt>Finished</dt>
+            <dd id="finishedText">@When(status.LastRunFinishedUtc)</dd>
+            <dt>Duration</dt>
+            <dd id="durationText">@Duration()</dd>
+            <dt>Dry run</dt>
+            <dd id="dryRunText">@(status.DryRun ? "On" : "Off")</dd>
+        </dl>
+    </section>
+    <div class="desk-side">
+        <section class="plate" aria-labelledby="auto-title">
+            <div class="plate-head">
+                <div>
+                    <p class="eyebrow"><partial name="_Icon" model='"triggers"' /> 02 · Auto</p>
+                    <h2 id="auto-title">Times</h2>
+                </div>
+                <span class="pill @(settings.ScheduledSyncEnabled ? "on" : "off")">
+                    <partial name="_Icon" model='@(settings.ScheduledSyncEnabled ? "check" : "dot")' />
+                    <span>@(settings.ScheduledSyncEnabled ? "On" : "Off")</span>
+                </span>
+            </div>
+            @if (settings.Schedules.Count == 0)
+            {
+                <p class="hint">No times saved.</p>
+            }
+            else
+            {
+                <ul class="time-list">
+                    @foreach (var entry in settings.Schedules)
+                    {
+                        <li class="@(entry.Enabled ? "" : "off")">
+                            <span>
+                                <svg class="ico" aria-hidden="true"><use href="#ico-@(string.IsNullOrWhiteSpace(entry.Cron) ? "clock" : "cron")"></use></svg>
+                                @Describe(entry)
+                            </span>
+                            <span>@(entry.Enabled ? "armed" : "off")</span>
+                        </li>
+                    }
+                </ul>
+            }
+            <p class="hint">Next <strong id="nextScheduledText">@(settings.ScheduledSyncEnabled ? When(Model.NextScheduledRunUtc) : "off")</strong></p>
+            <a class="icon-btn" asp-page="/Settings" asp-fragment="auto">
+                <partial name="_Icon" model='"edit"' />
+                <span>Edit times</span>
+            </a>
+        </section>
+        <section class="plate" aria-labelledby="interval-title">
+            <div class="plate-head">
+                <div>
+                    <p class="eyebrow"><partial name="_Icon" model='"interval"' /> 03 · Interval</p>
+                    <h2 id="interval-title">Every @settings.IntervalValue @settings.IntervalUnit</h2>
+                </div>
+                <span class="pill @(settings.IntervalSyncEnabled ? "on" : "off")" id="intervalPill">
+                    <partial name="_Icon" model='@(settings.IntervalSyncEnabled ? "check" : "dot")' />
+                    <span>@(settings.IntervalSyncEnabled ? "On" : "Off")</span>
+                </span>
+            </div>
+            <p class="hint">@(settings.IntervalSyncEnabled ? "Armed. Missed ticks are not replayed." : "Off until you arm it. That is the default, because each cycle hashes every syncable table.")</p>
+            <p class="hint">Next <strong id="nextIntervalText">@(settings.IntervalSyncEnabled ? When(Model.NextIntervalRunUtc) : "off")</strong></p>
+            <a class="icon-btn" asp-page="/Settings" asp-fragment="interval">
+                <partial name="_Icon" model='"edit"' />
+                <span>Edit interval</span>
+            </a>
+        </section>
+    </div>
+</div>
+
+<section class="ledger" aria-labelledby="last-title">
+    <div class="plate-head">
         <div>
-            <h2 class="h5 mb-1">Sync control</h2>
-            <div class="form-hint">
-                Mode:
-                <strong>@(Model.ServiceStatus.UsesWindowsService ? "Windows Service" : "Worker process")</strong>
-                · Status:
-                @if (Model.ServiceStatus.IsRunning)
-                {
-                    <span class="badge-main">RUNNING</span>
-                }
-                else
-                {
-                    <span class="badge-target">STOPPED</span>
-                }
-            </div>
-            <div class="form-hint mt-1">
-                Scheduled sync: <strong>@(settings.ScheduledSyncEnabled ? "ON" : "OFF")</strong>
-                · Interval sync: <strong>@(settings.IntervalSyncEnabled ? $"ON every {settings.IntervalValue} {settings.IntervalUnit}" : "OFF")</strong>
-                · Dry run: <strong>@(settings.DryRun ? "ON" : "OFF")</strong>
-                (<a asp-page="/Settings">change</a>)
-            </div>
-            <div class="form-hint mt-1">
-                The worker must be running for scheduled and interval sync. Sync now runs once even when those modes are off.
-            </div>
-            <div class="form-hint mt-2">
-                Last sync:
-                <strong id="syncStateText">@Model.SyncStatus.State</strong>
-                <span id="syncTriggerText">@(string.IsNullOrWhiteSpace(Model.SyncStatus.LastTrigger) ? "" : $" ({Model.SyncStatus.LastTrigger})")</span>
-                <span id="syncMessageText">— @Model.SyncStatus.Message</span>
-            </div>
-            <div class="form-hint mt-1" id="syncClockText">
-                Last run: @(Model.SyncStatus.LastRunFinishedUtc?.ToLocalTime().ToString("g") ?? "—")
-                · Next scheduled: <span id="nextScheduledText">@(settings.ScheduledSyncEnabled ? "see status" : "off")</span>
-                · Next interval: <span id="nextIntervalText">@(settings.IntervalSyncEnabled ? "see status" : "off")</span>
-            </div>
+            <p class="eyebrow"><partial name="_Icon" model='"ledger"' /> Last cycle</p>
+            <h2 id="last-title">What moved</h2>
         </div>
-        <div class="d-flex gap-2">
-            <form method="post" asp-page-handler="SyncNow">
-                <button type="submit" class="btn btn-accent">Sync now</button>
-            </form>
-            <form method="post" asp-page-handler="StartService">
-                <button type="submit" class="btn btn-outline-secondary" disabled="@(!canStart)">Run sync service</button>
-            </form>
-            <form method="post" asp-page-handler="StopService">
-                <button type="submit" class="btn btn-outline-danger" disabled="@(!canStop)">Stop sync service</button>
-            </form>
-        </div>
+        <a class="icon-btn" asp-page="/Conflicts">
+            <partial name="_Icon" model='"conflicts"' />
+            <span>@(Model.Conflicts.LogFound ? $"{Model.Conflicts.PendingCount} pending in the recent log" : "No conflict log yet")</span>
+        </a>
     </div>
-</div>
-
-<div class="panel mb-3">
-    <h2 class="h5 mb-3">Server sync results</h2>
-    <div class="table-responsive">
-        <table class="table mb-0" id="serverResultsTable">
+    <ul class="figures">
+        <li>
+            <span class="fig-num" id="figInserted">@status.RowsInserted</span>
+            <small><partial name="_Icon" model='"insert"' /> Inserted</small>
+        </li>
+        <li>
+            <span class="fig-num" id="figUpdated">@status.RowsUpdated</span>
+            <small><partial name="_Icon" model='"update"' /> Updated</small>
+        </li>
+        <li>
+            <span class="fig-num" id="figDeleted">@status.RowsDeleted</span>
+            <small><partial name="_Icon" model='"delete"' /> Deleted</small>
+        </li>
+        <li>
+            <a asp-page="/Conflicts">
+                <span class="fig-num" id="figConflicted">@status.RowsConflicted</span>
+                <small><partial name="_Icon" model='"conflicts"' /> Flagged</small>
+            </a>
+        </li>
+        <li>
+            <span class="fig-num" id="figBytes">@Bytes(status.EstimatedBytesTransferred)</span>
+            <small><partial name="_Icon" model='"bytes"' /> Sent</small>
+        </li>
+    </ul>
+    <div class="table-wrap">
+        <table class="ledger-table">
             <thead>
             <tr>
                 <th>Server</th>
                 <th>Role</th>
-                <th>IP / Database</th>
+                <th>Tables</th>
                 <th>Result</th>
-                <th>Reason</th>
+                <th>Note</th>
             </tr>
             </thead>
             <tbody id="serverResultsBody">
-            @if (Model.SyncStatus.Servers.Count == 0)
+            @if (status.Servers.Count == 0)
             {
                 <tr>
-                    <td colspan="5" class="text-muted">No sync results yet. Click Sync now.</td>
+                    <td colspan="5" class="muted">No cycle has finished yet.</td>
                 </tr>
             }
             else
             {
-                foreach (var s in Model.SyncStatus.Servers)
+                foreach (var server in status.Servers)
                 {
                     <tr>
-                        <td>@s.Name</td>
-                        <td>@(s.IsMain ? "MAIN" : "TARGET")</td>
-                        <td>@s.Server / @s.Database</td>
                         <td>
-                            @if (s.Outcome is "Synced" or "Source" or "Connected")
-                            {
-                                <span class="badge-main">@s.Outcome</span>
-                            }
-                            else
-                            {
-                                <span class="badge-target">@s.Outcome</span>
-                            }
+                            <strong>@server.Name</strong>
+                            <div class="mono muted">@server.Server / @server.Database</div>
                         </td>
-                        <td>@s.Reason</td>
+                        <td>
+                            <span class="pill @(server.IsMain ? "on" : "off")">
+                                <svg class="ico" aria-hidden="true"><use href="#ico-@(server.IsMain ? "star" : "link")"></use></svg>
+                                <span>@(server.IsMain ? "Main" : "Target")</span>
+                            </span>
+                        </td>
+                        <td class="mono">@server.TablesOk ok · @server.TablesFailed failed</td>
+                        <td>
+                            <span class="pill @Mark(server.Outcome)">
+                                <svg class="ico" aria-hidden="true"><use href="#ico-@OutcomeIcon(server.Outcome)"></use></svg>
+                                <span>@server.Outcome</span>
+                            </span>
+                        </td>
+                        <td>@server.Reason</td>
                     </tr>
                 }
             }
             </tbody>
         </table>
     </div>
-</div>
+    <p class="hint" style="margin-top:0.8rem">
+        <partial name="_Icon" model='"connections"' />
+        @Model.Configuration.Connections.Count connections · @enabled enabled · @(main?.Name ?? "No main") is the source · @targets @(targets == 1 ? "target" : "targets")
+    </p>
+</section>
 
-<div class="stat-grid mb-3">
-    <div class="stat">
-        <div class="label">Connections</div>
-        <div class="value">@Model.Configuration.Connections.Count</div>
+<footer class="worker">
+    <div>
+        <p class="eyebrow"><partial name="_Icon" model='"worker"' /> Worker</p>
+        <strong>@(Model.ServiceStatus.IsRunning ? "Running" : "Stopped")</strong>
+        <span class="muted">@(Model.ServiceStatus.UsesWindowsService ? "Windows service" : "Process")</span>
+        <p class="hint">Auto and interval need the worker. Sync now runs in this site when the lock is free.</p>
     </div>
-    <div class="stat">
-        <div class="label">Enabled</div>
-        <div class="value">@enabled</div>
+    <div class="worker-actions">
+        <form method="post" asp-page-handler="StartService">
+            <button type="submit" class="btn-ghost" disabled="@(!Model.ServiceStatus.CanStart)">
+                <partial name="_Icon" model='"play"' />
+                <span>Start worker</span>
+            </button>
+        </form>
+        <form method="post" asp-page-handler="StopService">
+            <button type="submit" class="btn-ghost" disabled="@(!Model.ServiceStatus.CanStop)">
+                <partial name="_Icon" model='"stop"' />
+                <span>Stop worker</span>
+            </button>
+        </form>
     </div>
-    <div class="stat">
-        <div class="label">Main</div>
-        <div class="value" style="font-size:1.05rem;">@(main?.Name ?? "Not set")</div>
-    </div>
-    <div class="stat">
-        <div class="label">Targets</div>
-        <div class="value">@targets</div>
-    </div>
-</div>
+</footer>
 
 @section Scripts {
 <script>
 (function () {
     const banner = document.getElementById('syncResultBanner');
-    const stateText = document.getElementById('syncStateText');
-    const triggerText = document.getElementById('syncTriggerText');
-    const messageText = document.getElementById('syncMessageText');
+    const statePill = document.getElementById('statePill');
+    const track = document.getElementById('runTrack');
+    const message = document.getElementById('runMessage');
+    const triggerText = document.getElementById('triggerText');
+    const startedText = document.getElementById('startedText');
+    const finishedText = document.getElementById('finishedText');
+    const durationText = document.getElementById('durationText');
+    const dryRunText = document.getElementById('dryRunText');
     const nextScheduledText = document.getElementById('nextScheduledText');
     const nextIntervalText = document.getElementById('nextIntervalText');
     const body = document.getElementById('serverResultsBody');
-    let notifiedSuccessKey = sessionStorage.getItem('syncSuccessKey') || '';
+    const figs = {
+        inserted: document.getElementById('figInserted'),
+        updated: document.getElementById('figUpdated'),
+        deleted: document.getElementById('figDeleted'),
+        conflicted: document.getElementById('figConflicted'),
+        bytes: document.getElementById('figBytes')
+    };
+    let primed = false;
+    let seenKey = '';
 
     function formatTime(value) {
         if (!value) return '—';
         const date = new Date(value);
         return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+    }
+
+    function formatBytes(value) {
+        const n = Number(value) || 0;
+        if (n < 1024) return n + ' B';
+        if (n < 1048576) return (n / 1024).toFixed(1).replace(/\.0$/, '') + ' KB';
+        return (n / 1048576).toFixed(2).replace(/\.00$/, '') + ' MB';
+    }
+
+    function formatDuration(start, end) {
+        if (!start || !end) return '—';
+        const span = new Date(end) - new Date(start);
+        if (!Number.isFinite(span) || span < 0) return '—';
+        const seconds = Math.round(span / 1000);
+        if (seconds >= 3600) return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+        if (seconds >= 60) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+        return seconds + 's';
     }
 
     function escapeHtml(value) {
@@ -166,23 +335,54 @@
             .replaceAll('"', '&quot;');
     }
 
+    function icon(name) {
+        return `<svg class="ico" aria-hidden="true" focusable="false"><use href="#ico-${name}"></use></svg>`;
+    }
+
+    function mark(outcome) {
+        if (outcome === 'Synced' || outcome === 'Source' || outcome === 'Connected') return 'mark-ok';
+        if (outcome === 'Failed') return 'mark-bad';
+        return 'mark-muted';
+    }
+
+    function outcomeIcon(outcome) {
+        if (outcome === 'Synced' || outcome === 'Connected') return 'check';
+        if (outcome === 'Source') return 'source';
+        if (outcome === 'Failed') return 'x';
+        return 'dot';
+    }
+
+    function pill(state) {
+        if (state === 'Running') return 'run';
+        if (state === 'Succeeded') return 'on';
+        if (state === 'Failed') return 'bad';
+        return 'off';
+    }
+
+    function stateIcon(state) {
+        if (state === 'Running') return 'sync';
+        if (state === 'Succeeded') return 'check';
+        if (state === 'Failed') return 'x';
+        if (state === 'Skipped') return 'cancel';
+        return 'dot';
+    }
+
     function renderServers(servers) {
         if (!servers || servers.length === 0) {
-            body.innerHTML = '<tr><td colspan="5" class="text-muted">No sync results yet. Click Sync now.</td></tr>';
+            body.innerHTML = '<tr><td colspan="5" class="muted">No cycle has finished yet.</td></tr>';
             return;
         }
-
-        body.innerHTML = servers.map(s => {
-            const role = s.isMain ? 'MAIN' : 'TARGET';
-            const badgeClass = (s.outcome === 'Synced' || s.outcome === 'Source' || s.outcome === 'Connected')
-                ? 'badge-main' : 'badge-target';
+        body.innerHTML = servers.map(server => {
+            const roleIcon = server.isMain ? 'star' : 'link';
+            const roleLabel = server.isMain ? 'Main' : 'Target';
+            const roleClass = server.isMain ? 'on' : 'off';
             return `<tr>
-                <td>${escapeHtml(s.name)}</td>
-                <td>${role}</td>
-                <td>${escapeHtml(s.server)} / ${escapeHtml(s.database)}</td>
-                <td><span class="${badgeClass}">${escapeHtml(s.outcome)}</span></td>
-                <td>${escapeHtml(s.reason)}</td>
-            </tr>`;
+            <td><strong>${escapeHtml(server.name)}</strong><div class="mono muted">${escapeHtml(server.server)} / ${escapeHtml(server.database)}</div></td>
+            <td><span class="pill ${roleClass}">${icon(roleIcon)}<span>${roleLabel}</span></span></td>
+            <td class="mono">${server.tablesOk || 0} ok · ${server.tablesFailed || 0} failed</td>
+            <td><span class="pill ${mark(server.outcome)}">${icon(outcomeIcon(server.outcome))}<span>${escapeHtml(server.outcome)}</span></span></td>
+            <td>${escapeHtml(server.reason)}</td>
+        </tr>`;
         }).join('');
     }
 
@@ -191,41 +391,47 @@
             const response = await fetch('?handler=SyncStatus', { cache: 'no-store' });
             if (!response.ok) return;
             const status = await response.json();
-
-            stateText.textContent = status.state || 'Idle';
-            triggerText.textContent = status.lastTrigger ? (' (' + status.lastTrigger + ')') : '';
-            messageText.textContent = status.message ? (' — ' + status.message) : '';
+            const state = status.state || 'Idle';
+            statePill.className = 'pill ' + pill(state);
+            statePill.innerHTML = `${icon(stateIcon(state))}<span>${escapeHtml(state)}</span>`;
+            track.dataset.state = state;
+            message.textContent = status.message || '';
+            triggerText.textContent = status.lastTrigger || '—';
+            startedText.textContent = formatTime(status.lastRunStartedUtc);
+            finishedText.textContent = formatTime(status.lastRunFinishedUtc);
+            durationText.textContent = formatDuration(status.lastRunStartedUtc, status.lastRunFinishedUtc);
+            dryRunText.textContent = status.dryRun ? 'On' : 'Off';
             nextScheduledText.textContent = status.scheduledSyncEnabled ? formatTime(status.nextScheduledRunUtc) : 'off';
             nextIntervalText.textContent = status.intervalSyncEnabled ? formatTime(status.nextIntervalRunUtc) : 'off';
+            figs.inserted.textContent = status.rowsInserted || 0;
+            figs.updated.textContent = status.rowsUpdated || 0;
+            figs.deleted.textContent = status.rowsDeleted || 0;
+            figs.conflicted.textContent = status.rowsConflicted || 0;
+            figs.bytes.textContent = formatBytes(status.estimatedBytesTransferred);
             renderServers(status.servers || []);
 
-            const key = (status.finishedAtUtc || '') + '|' + (status.state || '');
-            if (status.state === 'Succeeded' && key !== notifiedSuccessKey) {
-                banner.className = 'alert alert-success';
-                banner.textContent = status.message || 'Database sync successfully completed.';
-                banner.classList.remove('d-none');
-                notifiedSuccessKey = key;
-                sessionStorage.setItem('syncSuccessKey', key);
-            } else if (status.state === 'Failed' && key !== notifiedSuccessKey) {
-                banner.className = 'alert alert-danger';
-                banner.textContent = status.message || 'Database sync failed.';
-                banner.classList.remove('d-none');
-                notifiedSuccessKey = key;
-                sessionStorage.setItem('syncSuccessKey', key);
-            } else if (status.state === 'Running') {
+            const key = (status.lastRunFinishedUtc || '') + '|' + state;
+            if (!primed) {
+                primed = true;
+                seenKey = key;
+            }
+            if (state === 'Running') {
                 banner.className = 'alert alert-info';
-                banner.textContent = status.message || 'Database synchronisation is in progress...';
+                banner.innerHTML = `${icon('sync')}<span>${escapeHtml(status.message || 'Differential sync is in progress.')}</span>`;
                 banner.classList.remove('d-none');
-            } else if (status.state === 'Skipped') {
-                banner.className = 'alert alert-warning';
-                banner.textContent = status.message || 'Sync skipped outside timing window.';
+            } else if (key !== seenKey && (state === 'Succeeded' || state === 'Failed' || state === 'Skipped')) {
+                seenKey = key;
+                const kind = state === 'Succeeded' ? 'success' : state === 'Failed' ? 'danger' : 'warning';
+                const glyph = state === 'Succeeded' ? 'check' : state === 'Failed' ? 'x' : 'cancel';
+                banner.className = 'alert alert-' + kind;
+                banner.innerHTML = `${icon(glyph)}<span>${escapeHtml(status.message || state)}</span>`;
                 banner.classList.remove('d-none');
             }
         } catch (e) { }
     }
 
     refreshStatus();
-    setInterval(refreshStatus, 4000);
+    setInterval(refreshStatus, 2500);
 })();
 </script>
 }

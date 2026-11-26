@@ -47,6 +47,24 @@ public class IndexModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostSetEnabledAsync(string id, bool enabled)
+    {
+        var config = await _configStore.GetAsync();
+        var selected = config.Connections.FirstOrDefault(c => c.Id == id);
+        if (selected is null)
+        {
+            TempData["ErrorMessage"] = "Connection not found.";
+            return RedirectToPage();
+        }
+
+        selected.IsEnabled = enabled;
+        await _configStore.SaveAsync(config);
+        TempData["StatusMessage"] = enabled
+            ? $"'{selected.Name}' is enabled."
+            : $"'{selected.Name}' is disabled and will be skipped.";
+        return RedirectToPage();
+    }
+
     public async Task<IActionResult> OnPostDeleteAsync(string id)
     {
         var config = await _configStore.GetAsync();
@@ -71,10 +89,42 @@ public class IndexModel : PageModel
     public async Task<IActionResult> OnPostTestAsync(string id)
     {
         var result = await _connectionService.TestConnectionAsync(id);
+        var config = await _configStore.GetAsync();
+        var selected = config.Connections.FirstOrDefault(c => c.Id == id);
+        if (selected is not null)
+        {
+            ConnectivityProbe.Apply(selected, result);
+            await _configStore.SaveAsync(config);
+        }
+
         TempData[result.IsSuccessful ? "StatusMessage" : "ErrorMessage"] =
             result.IsSuccessful
-                ? $"Connected to {result.ConnectionName} ({result.Server}/{result.Database})."
+                ? $"Connected to {result.ConnectionName} ({result.Server}/{result.Database}) in {(long)result.Elapsed.TotalMilliseconds} ms."
                 : $"Failed {result.ConnectionName}: {result.ErrorMessage}";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostTestAllAsync()
+    {
+        var config = await _configStore.GetAsync();
+        var ok = 0;
+        var fail = 0;
+        foreach (var connection in config.Connections.Where(c => c.IsEnabled))
+        {
+            var result = await _connectionService.TestConnectionAsync(connection.Id);
+            ConnectivityProbe.Apply(connection, result);
+            if (result.IsSuccessful)
+            {
+                ok++;
+            }
+            else
+            {
+                fail++;
+            }
+        }
+
+        await _configStore.SaveAsync(config);
+        TempData["StatusMessage"] = $"Connectivity test finished. OK={ok}, Failed={fail}.";
         return RedirectToPage();
     }
 }
