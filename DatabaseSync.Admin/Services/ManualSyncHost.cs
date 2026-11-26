@@ -24,9 +24,9 @@ public sealed class ManualSyncHost
         _logger = logger;
     }
 
-    public void Queue()
+    public void Queue(string? requestedBy = null)
     {
-        _requests.Write();
+        _requests.Write(requestedBy: requestedBy);
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
         {
             return;

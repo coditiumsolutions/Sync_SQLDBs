@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using DatabaseSync.Admin.Services;
 using DatabaseSync.Core.Enums;
 using DatabaseSync.Core.Interfaces;
 using DatabaseSync.Core.Models;
@@ -16,10 +17,12 @@ public class SettingsModel : PageModel
     ];
 
     private readonly ISyncConfigStore _configStore;
+    private readonly AuditService _audit;
 
-    public SettingsModel(ISyncConfigStore configStore)
+    public SettingsModel(ISyncConfigStore configStore, AuditService audit)
     {
         _configStore = configStore;
+        _audit = audit;
     }
 
     public string ConfigPath { get; private set; } = string.Empty;
@@ -76,6 +79,11 @@ public class SettingsModel : PageModel
         settings.ChangeTimestampColumnNames = ParseNames(Input.ChangeTimestampColumnNames);
 
         await _configStore.SaveAsync(config);
+        await _audit.WriteAsync(
+            User,
+            "SaveSettings",
+            "Settings",
+            $"Scheduled={settings.ScheduledSyncEnabled}, Interval={settings.IntervalSyncEnabled}, DryRun={settings.DryRun}");
         TempData["StatusMessage"] =
             "Settings saved. Manual sync is always available. Scheduled and interval sync run only while the worker service is running, and only one sync runs at a time.";
         return RedirectToPage();

@@ -14,7 +14,18 @@
         <nav class="nav-links">
             <a asp-page="/Index">Dashboard</a>
             <a asp-page="/Connections/Index">Connections</a>
+            <a asp-page="/Tables">Tables</a>
             <a asp-page="/Settings">Settings</a>
+            <a asp-page="/History">History</a>
+            @if (User.IsInRole("Admin"))
+            {
+                <a asp-page="/Users">Users</a>
+            }
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <span class="ms-3 text-muted">@User.Identity.Name</span>
+                <a asp-page="/Logout">Logout</a>
+            }
         </nav>
     </div>
 </header>

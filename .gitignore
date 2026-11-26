@@ -22,6 +22,12 @@ sync-manual-request.json
 sync-run.lock
 **/sync-run.lock
 Conflicts/
+management.db
+**/management.db
+*.db-wal
+*.db-shm
+_dbcopy/
+*.bacpac
 benchmarks/.build/
 benchmarks/results/logs/
 benchmarks/results/conflicts/

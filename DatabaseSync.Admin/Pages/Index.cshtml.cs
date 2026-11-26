@@ -14,19 +14,22 @@ public class IndexModel : PageModel
     private readonly IWorkerServiceControl _workerServiceControl;
     private readonly ISyncStatusStore _statusStore;
     private readonly ManualSyncHost _manualSyncHost;
+    private readonly AuditService _audit;
 
     public IndexModel(
         ISyncConfigStore configStore,
         IDatabaseConnectionService connectionService,
         IWorkerServiceControl workerServiceControl,
         ISyncStatusStore statusStore,
-        ManualSyncHost manualSyncHost)
+        ManualSyncHost manualSyncHost,
+        AuditService audit)
     {
         _configStore = configStore;
         _connectionService = connectionService;
         _workerServiceControl = workerServiceControl;
         _statusStore = statusStore;
         _manualSyncHost = manualSyncHost;
+        _audit = audit;
     }
 
     public SyncConfiguration Configuration { get; private set; } = new();
@@ -61,6 +64,15 @@ public class IndexModel : PageModel
             status.RowsDeleted,
             status.RowsConflicted,
             status.EstimatedBytesTransferred,
+            status.SuccessfulTables,
+            status.FailedTables,
+            status.ProgressTotal,
+            status.ProgressCompleted,
+            status.ProgressPercent,
+            status.CurrentTargetName,
+            status.CurrentTable,
+            status.StartedAtUtc,
+            status.FinishedAtUtc,
             status.LastRunStartedUtc,
             status.LastRunFinishedUtc,
             status.LastManualRunUtc,
@@ -81,9 +93,11 @@ public class IndexModel : PageModel
         });
     }
 
-    public IActionResult OnPostSyncNow()
+    public async Task<IActionResult> OnPostSyncNowAsync()
     {
-        _manualSyncHost.Queue();
+        var userName = User.Identity?.Name;
+        _manualSyncHost.Queue(userName);
+        await _audit.WriteAsync(User, "SyncNow", "Sync", "Manual sync requested from dashboard.");
         TempData["StatusMessage"] =
             "Manual sync requested. It starts immediately unless another sync is running, in which case it runs once when that cycle finishes.";
         return RedirectToPage();

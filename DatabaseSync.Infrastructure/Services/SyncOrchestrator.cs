@@ -18,6 +18,7 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
     private readonly IDatabaseConnectionService _databaseConnectionService;
     private readonly ISqlConnectionFactory _connectionFactory;
     private readonly ISyncConfigStore _configStore;
+    private readonly ISyncStatusStore _statusStore;
     private readonly ILogger<SyncOrchestrator> _logger;
 
     public SyncOrchestrator(
@@ -26,6 +27,7 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
         IDatabaseConnectionService databaseConnectionService,
         ISqlConnectionFactory connectionFactory,
         ISyncConfigStore configStore,
+        ISyncStatusStore statusStore,
         ILogger<SyncOrchestrator> logger)
     {
         _schemaDiscoveryService = schemaDiscoveryService ?? throw new ArgumentNullException(nameof(schemaDiscoveryService));
@@ -33,6 +35,7 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
         _databaseConnectionService = databaseConnectionService ?? throw new ArgumentNullException(nameof(databaseConnectionService));
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         _configStore = configStore ?? throw new ArgumentNullException(nameof(configStore));
+        _statusStore = statusStore ?? throw new ArgumentNullException(nameof(statusStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -107,6 +110,19 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
             var targets = _connectionFactory.GetTargetConnections();
             var allResults = new List<TableSyncResult>();
             var syncedTargets = new List<string>();
+            var progressTotal = Math.Max(tables.Count * targets.Count, 0);
+            var progressCompleted = 0;
+
+            await ReportProgressAsync(
+                    progressTotal,
+                    progressCompleted,
+                    currentTarget: null,
+                    currentTable: null,
+                    message: progressTotal == 0
+                        ? "Discovering sync work..."
+                        : $"Preparing to sync {tables.Count} tables to {targets.Count} target(s)...",
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             foreach (var target in targets)
             {
@@ -122,6 +138,15 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
                         "Skipping sync to {TargetName}: {Error}",
                         target.Name,
                         targetConnectivity.ErrorMessage);
+                    progressCompleted += tables.Count;
+                    await ReportProgressAsync(
+                            progressTotal,
+                            progressCompleted,
+                            target.Name,
+                            currentTable: null,
+                            message: $"Skipped {target.Name}: unreachable. Progress {progressCompleted}/{progressTotal}.",
+                            cancellationToken)
+                        .ConfigureAwait(false);
                     continue;
                 }
 
@@ -141,10 +166,29 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
                     foreach (var table in tables)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
+                        var tableLabel = $"{table.SchemaName}.{table.TableName}";
+                        await ReportProgressAsync(
+                                progressTotal,
+                                progressCompleted,
+                                target.Name,
+                                tableLabel,
+                                message: $"Syncing {target.Name}: {tableLabel} ({progressCompleted}/{progressTotal})...",
+                                cancellationToken)
+                            .ConfigureAwait(false);
+
                         var result = await _tableSyncService
                             .SyncTableAsync(main.Id, target.Id, table, tableRequest, cancellationToken)
                             .ConfigureAwait(false);
                         allResults.Add(result);
+                        progressCompleted++;
+                        await ReportProgressAsync(
+                                progressTotal,
+                                progressCompleted,
+                                target.Name,
+                                tableLabel,
+                                message: $"Synced {target.Name}: {tableLabel} ({progressCompleted}/{progressTotal}).",
+                                cancellationToken)
+                            .ConfigureAwait(false);
                     }
                 }
                 finally
@@ -226,6 +270,28 @@ public sealed class SyncOrchestrator : ISyncOrchestrator
                 ErrorMessage = ex.Message
             };
         }
+    }
+
+    private async Task ReportProgressAsync(
+        int total,
+        int completed,
+        string? currentTarget,
+        string? currentTable,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var status = _statusStore.Get();
+        if (!string.Equals(status.State, "Running", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        status.ProgressTotal = total;
+        status.ProgressCompleted = Math.Clamp(completed, 0, Math.Max(total, 0));
+        status.CurrentTargetName = currentTarget;
+        status.CurrentTable = currentTable;
+        status.Message = message;
+        await _statusStore.WriteAsync(status, cancellationToken).ConfigureAwait(false);
     }
 
     private string ResolveBackupFolder(SyncSettings settings)

@@ -1,0 +1,91 @@
+@page
+@model DatabaseSync.Admin.Pages.UsersModel
+@{
+    ViewData["Title"] = "Users";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-1">User management</h1>
+        <div class="form-hint">Management DB: <code class="path">@Model.DatabasePath</code></div>
+    </div>
+</div>
+
+<div class="panel mb-3">
+    <h2 class="h5 mb-3">Create user</h2>
+    <form method="post" asp-page-handler="Create" class="row g-3">
+        <div class="col-md-3">
+            <label asp-for="NewUser.UserName" class="form-label"></label>
+            <input asp-for="NewUser.UserName" class="form-control" />
+        </div>
+        <div class="col-md-3">
+            <label asp-for="NewUser.DisplayName" class="form-label"></label>
+            <input asp-for="NewUser.DisplayName" class="form-control" />
+        </div>
+        <div class="col-md-2">
+            <label asp-for="NewUser.Password" class="form-label"></label>
+            <input asp-for="NewUser.Password" class="form-control" />
+        </div>
+        <div class="col-md-2">
+            <label asp-for="NewUser.Role" class="form-label"></label>
+            <select asp-for="NewUser.Role" class="form-select">
+                <option>Admin</option>
+                <option>Operator</option>
+                <option>Viewer</option>
+            </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-accent w-100">Add user</button>
+        </div>
+    </form>
+    <div asp-validation-summary="ModelOnly" class="text-danger mt-2"></div>
+</div>
+
+<div class="panel">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead>
+            <tr>
+                <th>Username</th>
+                <th>Display</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Last login</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var u in Model.Users)
+            {
+                <tr>
+                    <td><strong>@u.UserName</strong></td>
+                    <td>@u.DisplayName</td>
+                    <td>@u.Role</td>
+                    <td>
+                        @if (u.IsActive)
+                        {
+                            <span class="badge-main">Active</span>
+                        }
+                        else
+                        {
+                            <span class="badge-target">Inactive</span>
+                        }
+                    </td>
+                    <td>@(u.LastLoginAtUtc?.ToLocalTime().ToString("g") ?? "—")</td>
+                    <td class="text-end text-nowrap">
+                        <form method="post" asp-page-handler="Toggle" class="d-inline">
+                            <input type="hidden" name="id" value="@u.Id" />
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">@(u.IsActive ? "Deactivate" : "Activate")</button>
+                        </form>
+                        <form method="post" asp-page-handler="ResetPassword" class="d-inline-flex gap-1 align-items-center ms-1">
+                            <input type="hidden" name="id" value="@u.Id" />
+                            <input type="password" name="newPassword" class="form-control form-control-sm" placeholder="New password" style="width:9rem;" required minlength="6" />
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">Reset</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

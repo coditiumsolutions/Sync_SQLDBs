@@ -1,0 +1,172 @@
+@page
+@model DatabaseSync.Admin.Pages.TablesModel
+@{
+    ViewData["Title"] = "Tables";
+    var syncableCount = Model.Tables.Count(t => t.HasPrimaryKey);
+    var selectedCount = Model.Input.SelectedTables?.Count ?? 0;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-1">Tables to synchronise</h1>
+        <div class="form-hint">
+            Tables are loaded from the Main database
+            @if (Model.MainConnection is not null)
+            {
+                <text>
+                    (<strong>@Model.MainConnection.Name</strong> — @Model.MainConnection.Server / @Model.MainConnection.Database).
+                </text>
+            }
+            else
+            {
+                <text>(Main not set).</text>
+            }
+            Only tables with a primary key can be synchronised.
+        </div>
+        <div class="form-hint">Config: <code class="path">@Model.ConfigPath</code></div>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.LoadError))
+{
+    <div class="alert alert-warning">@Model.LoadError</div>
+}
+
+<form method="post" id="tablesForm">
+    <div class="panel mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+            <div class="form-check">
+                <input asp-for="Input.SyncAllTables" class="form-check-input" id="syncAllTables" />
+                <label asp-for="Input.SyncAllTables" class="form-check-label" for="syncAllTables">
+                    Synchronise all syncable tables (including new tables added later)
+                </label>
+            </div>
+            <div class="d-flex gap-2" id="selectionButtons">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnSelectAll">Select all syncable</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnClear">Clear</button>
+            </div>
+        </div>
+        <div class="form-hint mb-0" id="selectionSummary">
+            @if (Model.Input.SyncAllTables)
+            {
+                <text>Mode: <strong>all tables</strong> (@syncableCount syncable of @Model.Tables.Count listed).</text>
+            }
+            else
+            {
+                <text>Mode: <strong>selected only</strong> — <span id="selectedCountText">@selectedCount</span> selected.</text>
+            }
+        </div>
+    </div>
+
+    <div class="panel mb-3">
+        @if (Model.Tables.Count == 0 && string.IsNullOrWhiteSpace(Model.LoadError))
+        {
+            <p class="mb-0 text-muted">No user tables found on Main.</p>
+        }
+        else if (Model.Tables.Count > 0)
+        {
+            <div class="table-responsive">
+                <table class="table align-middle mb-0" id="tablesGrid">
+                    <thead>
+                    <tr>
+                        <th style="width:3rem;"></th>
+                        <th>Schema</th>
+                        <th>Table</th>
+                        <th>Primary key</th>
+                        <th class="text-end">Approx. rows</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var table in Model.Tables)
+                    {
+                        var isChecked = Model.Input.SyncAllTables
+                                        || (Model.Input.SelectedTables?.Contains(table.Key, StringComparer.OrdinalIgnoreCase) ?? false);
+                        <tr class="@(table.HasPrimaryKey ? "" : "table-secondary")">
+                            <td>
+                                @if (table.HasPrimaryKey)
+                                {
+                                    <input class="form-check-input table-check"
+                                           type="checkbox"
+                                           name="Input.SelectedTables"
+                                           value="@table.Key"
+                                           @(isChecked ? "checked" : null)
+                                           @(Model.Input.SyncAllTables ? "disabled" : null) />
+                                }
+                                else
+                                {
+                                    <input class="form-check-input" type="checkbox" disabled title="No primary key" />
+                                }
+                            </td>
+                            <td>@table.SchemaName</td>
+                            <td><strong>@table.TableName</strong></td>
+                            <td>
+                                @if (table.HasPrimaryKey)
+                                {
+                                    <span class="badge-main">Yes</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-target">No — skipped</span>
+                                }
+                            </td>
+                            <td class="text-end">@table.ApproximateRowCount.ToString("N0")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <button type="submit" class="btn btn-accent" @(Model.MainConnection is null ? "disabled" : null)>Save table selection</button>
+</form>
+
+@section Scripts {
+<script>
+(function () {
+    const syncAll = document.getElementById('syncAllTables');
+    const checks = () => Array.from(document.querySelectorAll('.table-check'));
+    const summary = document.getElementById('selectionSummary');
+    const buttons = document.getElementById('selectionButtons');
+
+    function updateUi() {
+        const all = syncAll.checked;
+        checks().forEach(c => {
+            c.disabled = all;
+            if (all) c.checked = true;
+        });
+        buttons.style.opacity = all ? '0.45' : '1';
+        buttons.style.pointerEvents = all ? 'none' : 'auto';
+        const selected = checks().filter(c => c.checked).length;
+        summary.innerHTML = all
+            ? 'Mode: <strong>all tables</strong> (every syncable table on Main, including new ones).'
+            : 'Mode: <strong>selected only</strong> — <span id="selectedCountText">' + selected + '</span> selected.';
+    }
+
+    syncAll.addEventListener('change', updateUi);
+    document.getElementById('btnSelectAll').addEventListener('click', () => {
+        if (syncAll.checked) return;
+        checks().forEach(c => c.checked = true);
+        updateUi();
+    });
+    document.getElementById('btnClear').addEventListener('click', () => {
+        if (syncAll.checked) return;
+        checks().forEach(c => c.checked = false);
+        updateUi();
+    });
+    document.getElementById('tablesForm').addEventListener('change', (e) => {
+        if (e.target.classList.contains('table-check')) updateUi();
+    });
+
+    // Before submit, re-enable checks so values post when SyncAll is on (optional),
+    // or ensure disabled checks are not required when SyncAll.
+    document.getElementById('tablesForm').addEventListener('submit', () => {
+        if (syncAll.checked) {
+            checks().forEach(c => { c.disabled = true; c.checked = false; });
+        }
+    });
+
+    updateUi();
+})();
+</script>
+}

@@ -26,6 +26,22 @@ public sealed class SyncRuntimeStatus
 
     public int FailedTables { get; set; }
 
+    /// <summary>Total table sync units for the current/last cycle (tables × targets).</summary>
+    public int ProgressTotal { get; set; }
+
+    /// <summary>Completed table sync units for the current/last cycle.</summary>
+    public int ProgressCompleted { get; set; }
+
+    /// <summary>0–100 based on ProgressCompleted / ProgressTotal.</summary>
+    public int ProgressPercent =>
+        ProgressTotal <= 0
+            ? (State is "Succeeded" or "Failed" or "Skipped" ? 100 : 0)
+            : Math.Clamp((int)Math.Round(100.0 * ProgressCompleted / ProgressTotal), 0, 100);
+
+    public string? CurrentTargetName { get; set; }
+
+    public string? CurrentTable { get; set; }
+
     public long RowsInserted { get; set; }
 
     public long RowsUpdated { get; set; }

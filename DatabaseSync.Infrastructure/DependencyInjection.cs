@@ -1,6 +1,7 @@
 using DatabaseSync.Core.Interfaces;
 using DatabaseSync.Infrastructure.Configuration;
 using DatabaseSync.Infrastructure.Data;
+using DatabaseSync.Infrastructure.Management;
 using DatabaseSync.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,9 +19,12 @@ public static class DependencyInjection
 
         services.Configure<SyncConfigStoreOptions>(
             configuration.GetSection(SyncConfigStoreOptions.SectionName));
+        services.Configure<ManagementDbOptions>(
+            configuration.GetSection(ManagementDbOptions.SectionName));
 
         services.AddSingleton<ISyncConfigStore, SyncConfigStore>();
         services.AddSingleton<ISyncStatusStore, SyncStatusStore>();
+        services.AddSingleton<IManagementStore, SqliteManagementStore>();
         services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
         services.AddSingleton<IDatabaseConnectionService, DatabaseConnectionService>();
         services.AddSingleton<IConnectivityCheckService, ConnectivityCheckService>();

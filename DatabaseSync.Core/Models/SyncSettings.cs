@@ -127,6 +127,18 @@ public sealed class SyncSettings
     /// </summary>
     public List<string> ChangeTimestampColumnNames { get; set; } = [];
 
+    /// <summary>
+    /// When true, every syncable table on Main is included. When false, only
+    /// <see cref="SelectedTables"/> are synchronised.
+    /// </summary>
+    public bool SyncAllTables { get; set; } = true;
+
+    /// <summary>
+    /// Schema-qualified table names to sync, e.g. <c>dbo.Customers</c>.
+    /// Used only when <see cref="SyncAllTables"/> is false.
+    /// </summary>
+    public List<string> SelectedTables { get; set; } = [];
+
     public int GetEffectiveIntervalSeconds()
     {
         if (AutoSyncEveryMinutes > 0)

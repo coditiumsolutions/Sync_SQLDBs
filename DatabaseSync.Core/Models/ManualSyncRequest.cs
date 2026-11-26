@@ -6,4 +6,6 @@ public sealed class ManualSyncRequest
     public Guid RequestId { get; set; }
 
     public DateTimeOffset RequestedAtUtc { get; set; }
+
+    public string? RequestedBy { get; set; }
 }

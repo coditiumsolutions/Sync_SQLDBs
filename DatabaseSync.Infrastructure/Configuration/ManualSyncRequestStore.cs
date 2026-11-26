@@ -26,12 +26,13 @@ public sealed class ManualSyncRequestStore : IManualSyncRequestStore
 
     public string RequestFilePath => _path;
 
-    public ManualSyncRequest Write(DateTimeOffset? requestedAtUtc = null)
+    public ManualSyncRequest Write(DateTimeOffset? requestedAtUtc = null, string? requestedBy = null)
     {
         var request = new ManualSyncRequest
         {
             RequestId = Guid.NewGuid(),
-            RequestedAtUtc = requestedAtUtc ?? DateTimeOffset.UtcNow
+            RequestedAtUtc = requestedAtUtc ?? DateTimeOffset.UtcNow,
+            RequestedBy = string.IsNullOrWhiteSpace(requestedBy) ? null : requestedBy.Trim()
         };
 
         _gate.Wait();

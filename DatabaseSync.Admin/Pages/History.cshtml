@@ -1,0 +1,154 @@
+@page
+@model DatabaseSync.Admin.Pages.HistoryModel
+@{
+    ViewData["Title"] = "History";
+}
+
+<div class="mb-3">
+    <h1 class="h3 mb-1">Management history</h1>
+    <div class="form-hint">Stored in SQLite: <code class="path">@Model.DatabasePath</code></div>
+</div>
+
+<div class="panel mb-3">
+    <h2 class="h5 mb-3">Sync runs</h2>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead>
+            <tr>
+                <th>When</th>
+                <th>Trigger</th>
+                <th>State</th>
+                <th>Main</th>
+                <th>Tables</th>
+                <th>Rows</th>
+                <th>By</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            @if (Model.SyncRuns.Count == 0)
+            {
+                <tr><td colspan="8" class="text-muted">No sync runs logged yet.</td></tr>
+            }
+            else
+            {
+                foreach (var run in Model.SyncRuns)
+                {
+                    <tr>
+                        <td>@run.StartedAtUtc.ToLocalTime().ToString("g")</td>
+                        <td>@run.Trigger</td>
+                        <td>
+                            @if (run.State is "Succeeded")
+                            {
+                                <span class="badge-main">@run.State</span>
+                            }
+                            else
+                            {
+                                <span class="badge-target">@run.State</span>
+                            }
+                        </td>
+                        <td>@(run.MainConnectionName ?? "—")</td>
+                        <td>@run.SuccessfulTables ok / @run.FailedTables fail</td>
+                        <td>+@run.RowsInserted / ~@run.RowsUpdated / -@run.RowsDeleted</td>
+                        <td>@(run.RequestedByUserName ?? "—")</td>
+                        <td class="text-end">
+                            <a class="btn btn-sm btn-outline-secondary" asp-page="/History" asp-route-runId="@run.Id">Details</a>
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (Model.SelectedRun is not null)
+{
+    var run = Model.SelectedRun;
+    <div class="panel mb-3">
+        <h2 class="h5 mb-2">Run #@run.Id details</h2>
+        <div class="form-hint mb-3">@run.Message</div>
+        <h3 class="h6">Servers</h3>
+        <div class="table-responsive mb-3">
+            <table class="table table-sm">
+                <thead><tr><th>Name</th><th>Role</th><th>Server</th><th>Outcome</th><th>Reason</th></tr></thead>
+                <tbody>
+                @foreach (var s in run.Servers)
+                {
+                    <tr>
+                        <td>@s.Name</td>
+                        <td>@(s.IsMain ? "MAIN" : "TARGET")</td>
+                        <td>@s.Server / @s.DatabaseName</td>
+                        <td>@s.Outcome</td>
+                        <td>@s.Reason</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <h3 class="h6">Tables</h3>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Table</th><th>Target</th><th>Result</th><th>I/U/D</th><th>Error</th></tr></thead>
+                <tbody>
+                @foreach (var t in run.Tables)
+                {
+                    <tr>
+                        <td>@t.SchemaName.@t.TableName</td>
+                        <td>@(t.TargetConnectionName ?? "—")</td>
+                        <td>@(t.Skipped ? "Skipped" : t.Success ? "OK" : "Failed")</td>
+                        <td>@t.RowsInserted / @t.RowsUpdated / @t.RowsDeleted</td>
+                        <td>@(t.ErrorMessage ?? "")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="panel h-100">
+            <h2 class="h5 mb-3">User actions</h2>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>When</th><th>User</th><th>Action</th><th>Detail</th></tr></thead>
+                    <tbody>
+                    @foreach (var a in Model.AuditEvents)
+                    {
+                        <tr>
+                            <td>@a.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                            <td>@(a.UserName ?? "—")</td>
+                            <td>@a.Category / @a.Action</td>
+                            <td>@a.Detail</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="panel h-100">
+            <h2 class="h5 mb-3">Login attempts</h2>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>When</th><th>User</th><th>Result</th><th>IP</th><th>Detail</th></tr></thead>
+                    <tbody>
+                    @foreach (var l in Model.LoginAttempts)
+                    {
+                        <tr>
+                            <td>@l.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                            <td>@l.UserName</td>
+                            <td>@(l.Succeeded ? "OK" : "Failed")</td>
+                            <td>@(l.IpAddress ?? "—")</td>
+                            <td>@l.Detail</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

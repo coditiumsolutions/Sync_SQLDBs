@@ -2,6 +2,7 @@ using DatabaseSync.Core.DTOs;
 using DatabaseSync.Core.Enums;
 using DatabaseSync.Core.Interfaces;
 using DatabaseSync.Core.Models;
+using DatabaseSync.Core.Models.Management;
 using DatabaseSync.Core.Scheduling;
 using DatabaseSync.Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,7 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
     private readonly ISyncStatusStore _statusStore;
     private readonly ISyncConfigStore _configStore;
     private readonly IManualSyncRequestStore _requests;
+    private readonly IManagementStore _managementStore;
     private readonly ILogger<SyncCycleRunner> _logger;
     private readonly string _lockPath;
 
@@ -26,6 +28,7 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
         ISyncStatusStore statusStore,
         ISyncConfigStore configStore,
         IManualSyncRequestStore requests,
+        IManagementStore managementStore,
         IOptions<SyncConfigStoreOptions> options,
         ILogger<SyncCycleRunner> logger)
     {
@@ -34,6 +37,7 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
         _statusStore = statusStore ?? throw new ArgumentNullException(nameof(statusStore));
         _configStore = configStore ?? throw new ArgumentNullException(nameof(configStore));
         _requests = requests ?? throw new ArgumentNullException(nameof(requests));
+        _managementStore = managementStore ?? throw new ArgumentNullException(nameof(managementStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         var configPath = Path.IsPathRooted(options.Value.FilePath)
@@ -84,7 +88,8 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
         var manual = trigger == SyncTriggerKind.Manual ? _requests.Read() : null;
         try
         {
-            return await ExecuteAsync(trigger, settings, cancellationToken).ConfigureAwait(false);
+            return await ExecuteAsync(trigger, settings, manual?.RequestedBy, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -101,6 +106,7 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
     private async Task<SyncTriggerOutcome> ExecuteAsync(
         SyncTriggerKind trigger,
         SyncSettings settings,
+        string? requestedBy,
         CancellationToken cancellationToken)
     {
         var started = DateTimeOffset.UtcNow;
@@ -114,6 +120,12 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
             : $"{trigger} differential sync is in progress...";
         running.StartedAtUtc = started;
         running.FinishedAtUtc = null;
+        running.ProgressTotal = 0;
+        running.ProgressCompleted = 0;
+        running.CurrentTargetName = null;
+        running.CurrentTable = null;
+        running.SuccessfulTables = 0;
+        running.FailedTables = 0;
         await _statusStore.WriteAsync(running, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -182,6 +194,10 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
             status.TargetsSynced = cycle.TargetsSynced.ToList();
             status.SuccessfulTables = cycle.SuccessfulTables;
             status.FailedTables = cycle.FailedTables;
+            status.ProgressTotal = Math.Max(latest.ProgressTotal, cycle.TableResults.Count);
+            status.ProgressCompleted = status.ProgressTotal;
+            status.CurrentTargetName = null;
+            status.CurrentTable = null;
             status.RowsInserted = cycle.RowsInserted;
             status.RowsUpdated = cycle.RowsUpdated;
             status.RowsDeleted = cycle.RowsDeleted;
@@ -206,6 +222,8 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
             }
 
             await _statusStore.WriteAsync(status, cancellationToken).ConfigureAwait(false);
+            await PersistManagementLogAsync(status, cycle, requestedBy, cancellationToken)
+                .ConfigureAwait(false);
             _logger.LogInformation(
                 "Sync trigger {Trigger} finished. Success={Success} Inserted={Inserted} Updated={Updated} Deleted={Deleted} Conflicted={Conflicted} EstimatedBytes={EstimatedBytes}",
                 trigger,
@@ -241,21 +259,91 @@ public sealed class SyncCycleRunner : ISyncCycleRunner
             failed.LastRunStartedUtc = started;
             failed.LastRunFinishedUtc = failed.FinishedAtUtc;
             await _statusStore.WriteAsync(failed, cancellationToken).ConfigureAwait(false);
+            var failedCycle = new SyncCycleResult
+            {
+                StartedAtUtc = started,
+                FinishedAtUtc = failed.FinishedAtUtc ?? DateTimeOffset.UtcNow,
+                Success = false,
+                Trigger = trigger,
+                DryRun = settings.DryRun,
+                ErrorMessage = ex.Message
+            };
+            await PersistManagementLogAsync(failed, failedCycle, requestedBy, cancellationToken)
+                .ConfigureAwait(false);
             return new SyncTriggerOutcome
             {
                 Trigger = trigger,
                 Started = true,
                 Message = failed.Message,
-                Cycle = new SyncCycleResult
-                {
-                    StartedAtUtc = started,
-                    FinishedAtUtc = failed.FinishedAtUtc ?? DateTimeOffset.UtcNow,
-                    Success = false,
-                    Trigger = trigger,
-                    DryRun = settings.DryRun,
-                    ErrorMessage = ex.Message
-                }
+                Cycle = failedCycle
             };
+        }
+    }
+
+    private async Task PersistManagementLogAsync(
+        SyncRuntimeStatus status,
+        SyncCycleResult cycle,
+        string? requestedBy,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var run = new SyncRunRecord
+            {
+                StartedAtUtc = cycle.StartedAtUtc,
+                FinishedAtUtc = cycle.FinishedAtUtc,
+                Trigger = cycle.Trigger.ToString(),
+                State = status.State,
+                DryRun = cycle.DryRun,
+                MainConnectionName = cycle.MainConnectionName,
+                Message = status.Message,
+                SuccessfulTables = cycle.SuccessfulTables,
+                FailedTables = cycle.FailedTables,
+                RowsInserted = cycle.RowsInserted,
+                RowsUpdated = cycle.RowsUpdated,
+                RowsDeleted = cycle.RowsDeleted,
+                RowsConflicted = cycle.RowsConflicted,
+                EstimatedBytesTransferred = cycle.EstimatedBytesTransferred,
+                RequestedByUserName = requestedBy,
+                Servers = (status.Servers ?? [])
+                    .Select(server => new SyncRunServerRecord
+                    {
+                        ConnectionId = server.ConnectionId,
+                        Name = server.Name,
+                        Server = server.Server,
+                        DatabaseName = server.Database,
+                        IsMain = server.IsMain,
+                        Outcome = server.Outcome,
+                        Reason = server.Reason,
+                        TablesOk = server.TablesOk,
+                        TablesFailed = server.TablesFailed
+                    })
+                    .ToList(),
+                Tables = cycle.TableResults
+                    .Select(table => new SyncRunTableRecord
+                    {
+                        SchemaName = table.SchemaName,
+                        TableName = table.TableName,
+                        TargetConnectionId = table.TargetConnectionId,
+                        TargetConnectionName = table.TargetConnectionName,
+                        Success = table.Success,
+                        Skipped = table.Skipped,
+                        RowsInserted = table.RowsInserted,
+                        RowsUpdated = table.RowsUpdated,
+                        RowsDeleted = table.RowsDeleted,
+                        RowsConflicted = table.RowsConflicted,
+                        EstimatedBytesTransferred = table.EstimatedBytesTransferred,
+                        ElapsedMs = (long)table.Elapsed.TotalMilliseconds,
+                        ErrorMessage = table.ErrorMessage
+                    })
+                    .ToList()
+            };
+
+            await _managementStore.SaveSyncRunAsync(run, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not persist sync run into management SQLite database.");
         }
     }
 

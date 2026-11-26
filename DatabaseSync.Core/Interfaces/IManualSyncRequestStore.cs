@@ -6,7 +6,7 @@ public interface IManualSyncRequestStore
 {
     string RequestFilePath { get; }
 
-    ManualSyncRequest Write(DateTimeOffset? requestedAtUtc = null);
+    ManualSyncRequest Write(DateTimeOffset? requestedAtUtc = null, string? requestedBy = null);
 
     ManualSyncRequest? Read();
 

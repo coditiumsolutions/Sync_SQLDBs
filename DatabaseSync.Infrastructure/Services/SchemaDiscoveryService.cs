@@ -1,4 +1,5 @@
 using Dapper;
+using DatabaseSync.Core.DTOs;
 using DatabaseSync.Core.Interfaces;
 using DatabaseSync.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -21,11 +22,49 @@ public sealed class SchemaDiscoveryService : ISchemaDiscoveryService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    public async Task<IReadOnlyList<TableCatalogEntry>> ListTablesAsync(
+        string connectionId,
+        CancellationToken cancellationToken = default)
+    {
+        var timeout = _configStore.Get().SyncSettings.CommandTimeoutSeconds;
+
+        await using var connection = _connectionFactory.CreateConnection(connectionId);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        const string sql = """
+            SELECT
+                s.name AS SchemaName,
+                t.name AS TableName,
+                CASE WHEN pk.object_id IS NULL THEN CAST(0 AS bit) ELSE CAST(1 AS bit) END AS HasPrimaryKey,
+                CAST(ISNULL(SUM(p.rows), 0) AS bigint) AS ApproximateRowCount
+            FROM sys.tables t
+            INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+            LEFT JOIN sys.indexes pk
+                ON pk.object_id = t.object_id AND pk.is_primary_key = 1
+            LEFT JOIN sys.partitions p
+                ON p.object_id = t.object_id AND p.index_id IN (0, 1)
+            WHERE t.is_ms_shipped = 0
+              AND s.name NOT IN (N'sync')
+              AND t.name NOT LIKE '\_\_Sync%' ESCAPE '\'
+              AND t.name NOT LIKE 'ConflictBackup[_]%'
+            GROUP BY s.name, t.name, pk.object_id
+            ORDER BY s.name, t.name;
+            """;
+
+        var rows = (await connection.QueryAsync<TableCatalogEntry>(
+            new CommandDefinition(sql, commandTimeout: timeout, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToList();
+
+        return rows;
+    }
+
     public async Task<IReadOnlyList<TableSchema>> GetTablesForSyncAsync(
         string sourceConnectionId,
         CancellationToken cancellationToken = default)
     {
-        var timeout = _configStore.Get().SyncSettings.CommandTimeoutSeconds;
+        var settings = _configStore.Get().SyncSettings;
+        var timeout = settings.CommandTimeoutSeconds;
+        var selected = BuildSelectedSet(settings);
 
         await using var connection = _connectionFactory.CreateConnection(sourceConnectionId);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -47,6 +86,13 @@ public sealed class SchemaDiscoveryService : ISchemaDiscoveryService
         var tables = (await connection.QueryAsync<(string SchemaName, string TableName, int ObjectId)>(
             new CommandDefinition(tableSql, commandTimeout: timeout, cancellationToken: cancellationToken))
             .ConfigureAwait(false)).ToList();
+
+        if (selected is not null)
+        {
+            tables = tables
+                .Where(t => selected.Contains($"{t.SchemaName}.{t.TableName}"))
+                .ToList();
+        }
 
         const string columnSql = """
             SELECT
@@ -146,11 +192,31 @@ public sealed class SchemaDiscoveryService : ISchemaDiscoveryService
         }
 
         _logger.LogInformation(
-            "Discovered {TableCount} syncable tables from connection {ConnectionId} (parent-first order).",
+            "Discovered {TableCount} syncable tables from connection {ConnectionId} (parent-first order). SyncAllTables={SyncAllTables} SelectedFilter={SelectedCount}.",
             ordered.Count,
-            sourceConnectionId);
+            sourceConnectionId,
+            settings.SyncAllTables,
+            selected?.Count ?? 0);
 
         return ordered;
+    }
+
+    /// <summary>
+    /// Null means sync every syncable table. Otherwise only keys in the set are included.
+    /// </summary>
+    private static HashSet<string>? BuildSelectedSet(SyncSettings settings)
+    {
+        if (settings.SyncAllTables)
+        {
+            return null;
+        }
+
+        var keys = (settings.SelectedTables ?? [])
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return keys;
     }
 
     private static List<int> TopologicalSort(
