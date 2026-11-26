@@ -148,6 +148,9 @@ a { color: var(--oxide); }
 }
 
 .nav-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--soft);
   text-decoration: none;
   font-size: 0.78rem;
@@ -163,6 +166,60 @@ a { color: var(--oxide); }
   color: var(--ink);
   border-bottom-color: var(--oxide);
 }
+
+.ico {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  display: inline-block;
+  vertical-align: -0.12em;
+}
+
+.nav-links .ico { width: 0.95rem; height: 0.95rem; }
+
+.btn-ink,
+.btn-ghost,
+.btn-sync,
+.icon-btn,
+.alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.btn-sync .ico { width: 1.15rem; height: 1.15rem; }
+
+.icon-btn {
+  cursor: pointer;
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  color: var(--ink);
+  padding: 0.15rem 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.icon-btn:hover { color: var(--oxide); }
+.icon-btn.danger { color: var(--oxide); }
+.icon-btn .ico { width: 0.95rem; height: 0.95rem; }
+
+.pill {
+  gap: 0.28rem;
+}
+
+.pill .ico { width: 0.78rem; height: 0.78rem; }
+
+.status-cell { max-width: 18rem; }
+.status-detail {
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.connections-table td:nth-child(4) { min-width: 11rem; }
 
 .page-head,
 .form-head {
@@ -188,6 +245,9 @@ h1 { font-size: clamp(2.4rem, 4vw, 3.4rem); line-height: 0.92; }
 h2 { font-size: 1.7rem; line-height: 1; }
 
 .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   margin: 0 0 0.35rem;
   font-family: var(--mono);
   font-size: 0.72rem;
@@ -195,6 +255,8 @@ h2 { font-size: 1.7rem; line-height: 1; }
   text-transform: uppercase;
   color: var(--brass);
 }
+
+.eyebrow .ico { width: 0.85rem; height: 0.85rem; color: var(--brass); }
 
 .lede, .hint {
   color: var(--soft);
@@ -242,6 +304,7 @@ h2 { font-size: 1.7rem; line-height: 1; }
 .stamp, .pill {
   display: inline-flex;
   align-items: center;
+  gap: 0.28rem;
   font-family: var(--mono);
   font-size: 0.68rem;
   letter-spacing: 0.12em;
@@ -267,6 +330,7 @@ h2 { font-size: 1.7rem; line-height: 1; }
   padding: 0.72rem 1rem;
   font-weight: 700;
   letter-spacing: 0.01em;
+  line-height: 1.1;
 }
 
 .btn-sync {
@@ -611,6 +675,8 @@ select.line { background: var(--sheet); }
   padding: 0.75rem 0.9rem;
   margin: 0 0 1rem;
 }
+
+.alert .ico { width: 1rem; height: 1rem; flex: none; }
 .alert-danger { border-left-color: var(--oxide); background: var(--oxide-soft); }
 .alert-warning, .alert-info { border-left-color: var(--brass); background: var(--brass-soft); }
 

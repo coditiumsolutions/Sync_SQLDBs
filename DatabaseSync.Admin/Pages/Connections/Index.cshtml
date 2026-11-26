@@ -1,4 +1,5 @@
 @page
+@using DatabaseSync.Admin.Services
 @model DatabaseSync.Admin.Pages.Connections.IndexModel
 @{
     ViewData["Title"] = "Connections";
@@ -12,9 +13,15 @@
     </div>
     <div class="split-actions">
         <form method="post" asp-page-handler="TestAll">
-            <button type="submit" class="btn-ghost">Test enabled</button>
+            <button type="submit" class="btn-ghost">
+                <partial name="_Icon" model='"test"' />
+                <span>Test enabled</span>
+            </button>
         </form>
-        <a class="btn-ink" asp-page="./Edit">Add connection</a>
+        <a class="btn-ink" asp-page="./Edit">
+            <partial name="_Icon" model='"plus"' />
+            <span>Add connection</span>
+        </a>
     </div>
 </div>
 
@@ -24,12 +31,13 @@
 }
 else
 {
-    <table class="ledger-table">
+    <table class="ledger-table connections-table">
         <thead>
         <tr>
             <th>Name</th>
             <th>Role</th>
             <th>Server / database</th>
+            <th>Status</th>
             <th>Enabled</th>
             <th></th>
         </tr>
@@ -37,19 +45,35 @@ else
         <tbody>
         @foreach (var connection in Model.Connections)
         {
+            var status = connection.LastConnectivityStatus;
             <tr class="@(connection.IsEnabled ? null : "is-disabled")">
                 <td><strong>@connection.Name</strong></td>
                 <td>
                     @if (connection.IsMain)
                     {
-                        <span class="pill on">Main</span>
+                        <span class="pill on">
+                            <partial name="_Icon" model='"star"' />
+                            <span>Main</span>
+                        </span>
                     }
                     else
                     {
-                        <span class="pill off">Target</span>
+                        <span class="pill off">
+                            <partial name="_Icon" model='"link"' />
+                            <span>Target</span>
+                        </span>
                     }
                 </td>
                 <td class="mono">@connection.Server / @connection.Database</td>
+                <td>
+                    <div class="status-cell" title="@ConnectionStatusDisplay.Detail(connection)">
+                        <span class="pill @ConnectionStatusDisplay.PillClass(status)">
+                            <partial name="_Icon" model='@ConnectionStatusDisplay.Icon(status)' />
+                            <span>@ConnectionStatusDisplay.Label(status)</span>
+                        </span>
+                        <div class="hint status-detail">@ConnectionStatusDisplay.Detail(connection)</div>
+                    </div>
+                </td>
                 <td>
                     <form method="post" asp-page-handler="SetEnabled" class="enable-form">
                         <input type="hidden" name="id" value="@connection.Id" />
@@ -66,21 +90,33 @@ else
                 </td>
                 <td>
                     <div class="row-actions">
-                        <a class="text-btn" asp-page="./Edit" asp-route-id="@connection.Id">Edit</a>
+                        <a class="icon-btn" asp-page="./Edit" asp-route-id="@connection.Id" title="Edit">
+                            <partial name="_Icon" model='"edit"' />
+                            <span>Edit</span>
+                        </a>
                         <form method="post" asp-page-handler="Test">
                             <input type="hidden" name="id" value="@connection.Id" />
-                            <button class="text-btn" type="submit">Test</button>
+                            <button class="icon-btn" type="submit" title="Test connection">
+                                <partial name="_Icon" model='"test"' />
+                                <span>Test</span>
+                            </button>
                         </form>
                         @if (!connection.IsMain)
                         {
                             <form method="post" asp-page-handler="SetMain">
                                 <input type="hidden" name="id" value="@connection.Id" />
-                                <button class="text-btn" type="submit">Make main</button>
+                                <button class="icon-btn" type="submit" title="Make main">
+                                    <partial name="_Icon" model='"star"' />
+                                    <span>Make main</span>
+                                </button>
                             </form>
                         }
                         <form method="post" asp-page-handler="Delete" onsubmit="return confirm('Delete this connection?');">
                             <input type="hidden" name="id" value="@connection.Id" />
-                            <button class="text-btn danger" type="submit">Delete</button>
+                            <button class="icon-btn danger" type="submit" title="Delete">
+                                <partial name="_Icon" model='"trash"' />
+                                <span>Delete</span>
+                            </button>
                         </form>
                     </div>
                 </td>

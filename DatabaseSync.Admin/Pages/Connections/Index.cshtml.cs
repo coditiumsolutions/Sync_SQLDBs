@@ -89,9 +89,17 @@ public class IndexModel : PageModel
     public async Task<IActionResult> OnPostTestAsync(string id)
     {
         var result = await _connectionService.TestConnectionAsync(id);
+        var config = await _configStore.GetAsync();
+        var selected = config.Connections.FirstOrDefault(c => c.Id == id);
+        if (selected is not null)
+        {
+            ConnectivityProbe.Apply(selected, result);
+            await _configStore.SaveAsync(config);
+        }
+
         TempData[result.IsSuccessful ? "StatusMessage" : "ErrorMessage"] =
             result.IsSuccessful
-                ? $"Connected to {result.ConnectionName} ({result.Server}/{result.Database})."
+                ? $"Connected to {result.ConnectionName} ({result.Server}/{result.Database}) in {(long)result.Elapsed.TotalMilliseconds} ms."
                 : $"Failed {result.ConnectionName}: {result.ErrorMessage}";
         return RedirectToPage();
     }
@@ -104,6 +112,7 @@ public class IndexModel : PageModel
         foreach (var connection in config.Connections.Where(c => c.IsEnabled))
         {
             var result = await _connectionService.TestConnectionAsync(connection.Id);
+            ConnectivityProbe.Apply(connection, result);
             if (result.IsSuccessful)
             {
                 ok++;
@@ -114,6 +123,7 @@ public class IndexModel : PageModel
             }
         }
 
+        await _configStore.SaveAsync(config);
         TempData["StatusMessage"] = $"Connectivity test finished. OK={ok}, Failed={fail}.";
         return RedirectToPage();
     }

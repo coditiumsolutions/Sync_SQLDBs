@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
+<partial name="_IconSprites" />
 <div class="sheet">
     <header class="mast">
         <a class="brand" asp-page="/Index">
@@ -25,19 +26,37 @@
             <span class="brand-name">Sync desk</span>
         </a>
         <nav class="nav-links">
-            <a class="@desk" asp-page="/Index">Desk</a>
-            <a class="@Here("/Connections")" asp-page="/Connections/Index">Connections</a>
-            <a class="@Here("/Settings")" asp-page="/Settings">Triggers</a>
-            <a class="@Here("/Conflicts")" asp-page="/Conflicts">Conflicts</a>
+            <a class="@desk" asp-page="/Index">
+                <partial name="_Icon" model='"desk"' />
+                <span>Desk</span>
+            </a>
+            <a class="@Here("/Connections")" asp-page="/Connections/Index">
+                <partial name="_Icon" model='"connections"' />
+                <span>Connections</span>
+            </a>
+            <a class="@Here("/Settings")" asp-page="/Settings">
+                <partial name="_Icon" model='"triggers"' />
+                <span>Triggers</span>
+            </a>
+            <a class="@Here("/Conflicts")" asp-page="/Conflicts">
+                <partial name="_Icon" model='"conflicts"' />
+                <span>Conflicts</span>
+            </a>
         </nav>
     </header>
     @if (TempData["StatusMessage"] is string status && !string.IsNullOrWhiteSpace(status))
     {
-        <div class="alert alert-success" role="status">@status</div>
+        <div class="alert alert-success" role="status">
+            <partial name="_Icon" model='"check"' />
+            <span>@status</span>
+        </div>
     }
     @if (TempData["ErrorMessage"] is string error && !string.IsNullOrWhiteSpace(error))
     {
-        <div class="alert alert-danger" role="alert">@error</div>
+        <div class="alert alert-danger" role="alert">
+            <partial name="_Icon" model='"x"' />
+            <span>@error</span>
+        </div>
     }
     <main>
         @RenderBody()

@@ -11,7 +11,10 @@
             <h1>When a cycle starts</h1>
             <p class="lede">Manual is the Sync now button on the desk. It is always armed. Auto and interval are configured here and stay quiet until you turn them on.</p>
         </div>
-        <button type="submit" class="btn-ink">Save settings</button>
+        <button type="submit" class="btn-ink">
+            <partial name="_Icon" model='"save"' />
+            <span>Save settings</span>
+        </button>
     </div>
 
     @if (!Model.OneWaySyncEnabled)
@@ -27,7 +30,7 @@
     <section class="plate section" id="auto">
         <div class="plate-head">
             <div>
-                <p class="eyebrow">02 · Auto</p>
+                <p class="eyebrow"><partial name="_Icon" model='"triggers"' /> 02 · Auto</p>
                 <h2>Local times</h2>
                 <p class="hint">Each row fires once, in this machine's time zone. Leave the days empty for every day. A cron expression replaces the clock. Occurrences later than the grace window are missed, not replayed. The worker must be running.</p>
             </div>
@@ -65,7 +68,10 @@
                             <span>Cron</span>
                         </label>
                     </div>
-                    <button type="submit" class="text-btn danger" asp-page-handler="RemoveSchedule" asp-route-index="@i">Remove</button>
+                    <button type="submit" class="icon-btn danger" asp-page-handler="RemoveSchedule" asp-route-index="@i">
+                        <partial name="_Icon" model='"trash"' />
+                        <span>Remove</span>
+                    </button>
                 </header>
                 <div class="clock-fields">
                     <div class="clock-line">
@@ -96,14 +102,17 @@
         }
 
         <div class="split-actions" style="margin-top:0.8rem">
-            <button type="submit" class="btn-ghost" asp-page-handler="AddSchedule">Add time</button>
+            <button type="submit" class="btn-ghost" asp-page-handler="AddSchedule">
+                <partial name="_Icon" model='"plus"' />
+                <span>Add time</span>
+            </button>
         </div>
     </section>
 
     <section class="plate section interval-plate" id="interval">
         <div class="plate-head">
             <div>
-                <p class="eyebrow">03 · Interval</p>
+                <p class="eyebrow"><partial name="_Icon" model='"interval"' /> 03 · Interval</p>
                 <h2>Every so often</h2>
                 <p class="hint">Off unless you arm it. Each cycle hashes every syncable table, so a short interval is expensive. Missed ticks are not caught up. The worker must be running.</p>
             </div>

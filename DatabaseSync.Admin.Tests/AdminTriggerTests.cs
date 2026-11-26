@@ -1,9 +1,64 @@
 using DatabaseSync.Admin.Pages;
 using DatabaseSync.Admin.Services;
+using DatabaseSync.Core.DTOs;
 using DatabaseSync.Core.Enums;
 using DatabaseSync.Core.Models;
 
 namespace DatabaseSync.Admin.Tests;
+
+public class ConnectivityProbeTests
+{
+    [Fact]
+    public void Apply_stores_a_successful_probe()
+    {
+        var connection = new SyncConnection { Name = "Main" };
+        ConnectivityProbe.Apply(connection, new DatabaseConnectivityResult
+        {
+            ConnectionId = "1",
+            ConnectionName = "Main",
+            Server = "db",
+            Database = "app",
+            Status = ConnectionStatus.Connected,
+            Elapsed = TimeSpan.FromMilliseconds(42),
+            ServerVersion = "Microsoft SQL Server 2022",
+            CheckedAtUtc = DateTimeOffset.Parse("2026-11-26T06:00:00Z")
+        });
+
+        Assert.Equal(ConnectionStatus.Connected, connection.LastConnectivityStatus);
+        Assert.Equal(42, connection.LastConnectivityElapsedMs);
+        Assert.Equal("Microsoft SQL Server 2022", connection.LastConnectivityServerVersion);
+        Assert.Null(connection.LastConnectivityError);
+        Assert.Equal(DateTimeOffset.Parse("2026-11-26T06:00:00Z"), connection.LastConnectivityCheckedAtUtc);
+    }
+
+    [Fact]
+    public void Apply_keeps_the_error_and_clear_resets_it()
+    {
+        var connection = new SyncConnection();
+        ConnectivityProbe.Apply(connection, new DatabaseConnectivityResult
+        {
+            ConnectionId = "1",
+            ConnectionName = "Branch",
+            Server = "db",
+            Database = "app",
+            Status = ConnectionStatus.TimedOut,
+            Elapsed = TimeSpan.FromSeconds(15),
+            ErrorMessage = "Timeout expired.",
+            CheckedAtUtc = DateTimeOffset.UtcNow
+        });
+
+        Assert.Equal(ConnectionStatus.TimedOut, connection.LastConnectivityStatus);
+        Assert.Equal("Timeout expired.", connection.LastConnectivityError);
+        Assert.Equal("Timed out", ConnectionStatusDisplay.Label(connection.LastConnectivityStatus));
+        Assert.Equal("clock", ConnectionStatusDisplay.Icon(connection.LastConnectivityStatus));
+
+        connection.ClearLastConnectivity();
+        Assert.Equal(ConnectionStatus.Unknown, connection.LastConnectivityStatus);
+        Assert.Null(connection.LastConnectivityCheckedAtUtc);
+        Assert.Null(connection.LastConnectivityError);
+        Assert.Equal("Not tested", ConnectionStatusDisplay.Label(connection.LastConnectivityStatus));
+    }
+}
 
 public class ConflictLogReviewTests
 {

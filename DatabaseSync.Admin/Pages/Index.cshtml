@@ -64,14 +64,17 @@
     <section class="plate plate-manual" aria-labelledby="manual-title">
         <div class="plate-head">
             <div>
-                <p class="eyebrow">01 · Manual</p>
+                <p class="eyebrow"><partial name="_Icon" model='"manual"' /> 01 · Manual</p>
                 <h2 id="manual-title">Sync now</h2>
             </div>
             <span class="pill @Pill(status.State)" id="statePill">@(string.IsNullOrWhiteSpace(status.State) ? "Idle" : status.State)</span>
         </div>
         <p class="hint">One differential cycle. Always armed. A click during another cycle waits, then runs once.</p>
         <form method="post" asp-page-handler="SyncNow" class="split-actions" style="margin-top:0.9rem">
-            <button type="submit" class="btn-sync" id="syncButton">Sync now</button>
+            <button type="submit" class="btn-sync" id="syncButton">
+                <partial name="_Icon" model='"sync"' />
+                <span>Sync now</span>
+            </button>
         </form>
         <div class="track" id="runTrack" data-state="@status.State" aria-hidden="true"><span class="track-fill"></span></div>
         <p class="run-line" id="runMessage">@status.Message</p>
@@ -92,7 +95,7 @@
         <section class="plate" aria-labelledby="auto-title">
             <div class="plate-head">
                 <div>
-                    <p class="eyebrow">02 · Auto</p>
+                    <p class="eyebrow"><partial name="_Icon" model='"triggers"' /> 02 · Auto</p>
                     <h2 id="auto-title">Times</h2>
                 </div>
                 <span class="pill @(settings.ScheduledSyncEnabled ? "on" : "off")">@(settings.ScheduledSyncEnabled ? "On" : "Off")</span>
@@ -114,19 +117,25 @@
                 </ul>
             }
             <p class="hint">Next <strong id="nextScheduledText">@(settings.ScheduledSyncEnabled ? When(Model.NextScheduledRunUtc) : "off")</strong></p>
-            <a class="text-btn" asp-page="/Settings" asp-fragment="auto">Edit times</a>
+            <a class="icon-btn" asp-page="/Settings" asp-fragment="auto">
+                <partial name="_Icon" model='"edit"' />
+                <span>Edit times</span>
+            </a>
         </section>
         <section class="plate" aria-labelledby="interval-title">
             <div class="plate-head">
                 <div>
-                    <p class="eyebrow">03 · Interval</p>
+                    <p class="eyebrow"><partial name="_Icon" model='"interval"' /> 03 · Interval</p>
                     <h2 id="interval-title">Every @settings.IntervalValue @settings.IntervalUnit</h2>
                 </div>
                 <span class="pill @(settings.IntervalSyncEnabled ? "on" : "off")" id="intervalPill">@(settings.IntervalSyncEnabled ? "On" : "Off")</span>
             </div>
             <p class="hint">@(settings.IntervalSyncEnabled ? "Armed. Missed ticks are not replayed." : "Off until you arm it. That is the default, because each cycle hashes every syncable table.")</p>
             <p class="hint">Next <strong id="nextIntervalText">@(settings.IntervalSyncEnabled ? When(Model.NextIntervalRunUtc) : "off")</strong></p>
-            <a class="text-btn" asp-page="/Settings" asp-fragment="interval">Edit interval</a>
+            <a class="icon-btn" asp-page="/Settings" asp-fragment="interval">
+                <partial name="_Icon" model='"edit"' />
+                <span>Edit interval</span>
+            </a>
         </section>
     </div>
 </div>
@@ -137,8 +146,9 @@
             <p class="eyebrow">Last cycle</p>
             <h2 id="last-title">What moved</h2>
         </div>
-        <a class="text-btn" asp-page="/Conflicts">
-            @(Model.Conflicts.LogFound ? $"{Model.Conflicts.PendingCount} pending in the recent log" : "No conflict log yet")
+        <a class="icon-btn" asp-page="/Conflicts">
+            <partial name="_Icon" model='"conflicts"' />
+            <span>@(Model.Conflicts.LogFound ? $"{Model.Conflicts.PendingCount} pending in the recent log" : "No conflict log yet")</span>
         </a>
     </div>
     <ul class="figures">
@@ -204,10 +214,16 @@
     </div>
     <div class="worker-actions">
         <form method="post" asp-page-handler="StartService">
-            <button type="submit" class="btn-ghost" disabled="@(!Model.ServiceStatus.CanStart)">Start worker</button>
+            <button type="submit" class="btn-ghost" disabled="@(!Model.ServiceStatus.CanStart)">
+                <partial name="_Icon" model='"play"' />
+                <span>Start worker</span>
+            </button>
         </form>
         <form method="post" asp-page-handler="StopService">
-            <button type="submit" class="btn-ghost" disabled="@(!Model.ServiceStatus.CanStop)">Stop worker</button>
+            <button type="submit" class="btn-ghost" disabled="@(!Model.ServiceStatus.CanStop)">
+                <partial name="_Icon" model='"stop"' />
+                <span>Stop worker</span>
+            </button>
         </form>
     </div>
 </footer>

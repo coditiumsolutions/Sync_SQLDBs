@@ -11,8 +11,14 @@
             <h1>@ViewData["Title"]</h1>
         </div>
         <div class="split-actions">
-            <a class="btn-ghost" asp-page="./Index">Cancel</a>
-            <button type="submit" class="btn-ink">Save</button>
+            <a class="btn-ghost" asp-page="./Index">
+                <partial name="_Icon" model='"x"' />
+                <span>Cancel</span>
+            </a>
+            <button type="submit" class="btn-ink">
+                <partial name="_Icon" model='"save"' />
+                <span>Save</span>
+            </button>
         </div>
     </div>
     <input type="hidden" asp-for="Input.Id" />
