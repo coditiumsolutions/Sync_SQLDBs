@@ -1,0 +1,62 @@
+@page
+@model DatabaseSync.Admin.Pages.SummaryModel
+@{
+    ViewData["Title"] = "Summary";
+}
+
+<div class="mb-3">
+    <h1 class="h3 mb-1">Summary</h1>
+    <div class="form-hint mb-0">
+        IP address and host provider name for every connection across all instances.
+    </div>
+</div>
+
+<div class="panel">
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="mb-0 text-muted">No instances found.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>Instance</th>
+                    <th>Host provider name</th>
+                    <th>IP address</th>
+                    <th>Role</th>
+                    <th>Database</th>
+                    <th>Enabled</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr class="@(row.IsEnabled ? "" : "text-muted")">
+                        <td><strong>@row.InstanceName</strong></td>
+                        <td>@row.HostProviderName</td>
+                        <td><code>@row.IpAddress</code></td>
+                        <td>
+                            @if (row.Role == "Main")
+                            {
+                                <span class="badge-main">MAIN</span>
+                            }
+                            else if (row.Role == "Target")
+                            {
+                                <span class="badge-target">TARGET</span>
+                            }
+                            else
+                            {
+                                @row.Role
+                            }
+                        </td>
+                        <td>@row.Database</td>
+                        <td>@(row.IsEnabled ? "Yes" : "No")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

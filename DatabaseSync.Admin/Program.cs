@@ -35,6 +35,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IWorkerServiceControl, WorkerServiceControl>();
 builder.Services.AddSingleton<ManualSyncHost>();
 builder.Services.AddSingleton<AuditService>();
+builder.Services.AddScoped<ActiveInstanceInfo>();
 builder.Services.AddDatabaseSyncInfrastructure(builder.Configuration);
 
 var app = builder.Build();

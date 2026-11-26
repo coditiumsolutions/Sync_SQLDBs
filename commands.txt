@@ -7,9 +7,18 @@ sc start Coditium.DatabaseSync
 // Status Check
 sc query Coditium.DatabaseSync
 //SERVICE_NAME: Coditium.DatabaseSync
-//        TYPE               : 10  WIN32_OWN_PROCESS
-//        STATE              : 1  STOPPED
+//        TYPE               : 10  WIN32_OWN_PROCESS 
+//        STATE              : 1  STOPPED 
 //        WIN32_EXIT_CODE    : 0  (0x0)
 //        SERVICE_EXIT_CODE  : 0  (0x0)
 //        CHECKPOINT         : 0x0
 //        WAIT_HINT          : 0x0
+
+// ---- Multi-product instances (one product = one Admin port + own sync-config) ----
+// .\instances\Publish-SharedRuntime.ps1
+// .\instances\New-SyncInstance.ps1 -Name PMS -Port 5088 -Database RND_PMS_Sync
+// .\instances\New-SyncInstance.ps1 -Name POS -Port 5089 -Database YourPosDb
+// .\instances\Start-SyncInstance.ps1 -Name PMS
+// .\instances\Stop-SyncInstance.ps1 -Name PMS
+// .\instances\List-SyncInstances.ps1
+// PMS http://127.0.0.1:5088 | POS :5089 | Restaurant :5090 | Billing :5091

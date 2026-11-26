@@ -1,0 +1,8 @@
+﻿{
+    "name":  "Billing",
+    "port":  5088,
+    "adminUrl":  "http://127.0.0.1:5088",
+    "databaseHint":  "BMSBT Lahore",
+    "configPath":  "D:\\Dotnet\\CoreCursor\\SynchroniseDB\\instances\\Billing\\sync-config.json",
+    "createdAtUtc":  "2026-11-26T08:55:38.9548766Z"
+}

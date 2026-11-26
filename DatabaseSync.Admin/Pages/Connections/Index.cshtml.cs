@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DatabaseSync.Core.Interfaces;
 using DatabaseSync.Core.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +8,8 @@ namespace DatabaseSync.Admin.Pages.Connections;
 
 public class IndexModel : PageModel
 {
+    private static readonly ConcurrentDictionary<string, ConnectionTestStatus> LastTestResults = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly ISyncConfigStore _configStore;
     private readonly IDatabaseConnectionService _connectionService;
 
@@ -18,6 +21,9 @@ public class IndexModel : PageModel
 
     public List<SyncConnection> Connections { get; private set; } = [];
 
+    public IReadOnlyDictionary<string, ConnectionTestStatus> TestStatuses { get; private set; } =
+        new Dictionary<string, ConnectionTestStatus>(StringComparer.OrdinalIgnoreCase);
+
     public async Task OnGetAsync()
     {
         var config = await _configStore.GetAsync();
@@ -25,6 +31,17 @@ public class IndexModel : PageModel
             .OrderByDescending(c => c.IsMain)
             .ThenBy(c => c.Name)
             .ToList();
+
+        var statuses = new Dictionary<string, ConnectionTestStatus>(StringComparer.OrdinalIgnoreCase);
+        foreach (var connection in Connections)
+        {
+            if (LastTestResults.TryGetValue(connection.Id, out var status))
+            {
+                statuses[connection.Id] = status;
+            }
+        }
+
+        TestStatuses = statuses;
     }
 
     public async Task<IActionResult> OnPostSetMainAsync(string id)
@@ -71,10 +88,26 @@ public class IndexModel : PageModel
     public async Task<IActionResult> OnPostTestAsync(string id)
     {
         var result = await _connectionService.TestConnectionAsync(id);
+        LastTestResults[id] = new ConnectionTestStatus
+        {
+            IsConnected = result.IsSuccessful,
+            Detail = result.IsSuccessful
+                ? $"{result.Server}/{result.Database}"
+                : (result.ErrorMessage ?? "Connection failed."),
+            CheckedAtUtc = result.CheckedAtUtc
+        };
+
         TempData[result.IsSuccessful ? "StatusMessage" : "ErrorMessage"] =
             result.IsSuccessful
                 ? $"Connected to {result.ConnectionName} ({result.Server}/{result.Database})."
-                : $"Failed {result.ConnectionName}: {result.ErrorMessage}";
+                : $"Fail Connection — {result.ConnectionName}: {result.ErrorMessage}";
         return RedirectToPage();
+    }
+
+    public sealed class ConnectionTestStatus
+    {
+        public bool IsConnected { get; init; }
+        public string Detail { get; init; } = "";
+        public DateTimeOffset CheckedAtUtc { get; init; }
     }
 }

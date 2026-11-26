@@ -1,0 +1,8 @@
+﻿{
+    "name":  "PMS",
+    "port":  5088,
+    "adminUrl":  "http://127.0.0.1:5088",
+    "databaseHint":  "RND_PMS_Sync",
+    "configPath":  "D:\\Dotnet\\CoreCursor\\SynchroniseDB\\instances\\PMS\\sync-config.json",
+    "createdAtUtc":  "2026-11-26T08:55:36.6979319Z"
+}

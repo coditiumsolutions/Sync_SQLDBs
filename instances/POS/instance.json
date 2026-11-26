@@ -1,0 +1,8 @@
+﻿{
+    "name":  "POS",
+    "port":  5088,
+    "adminUrl":  "http://127.0.0.1:5088",
+    "databaseHint":  "YourPosDb",
+    "configPath":  "D:\\Dotnet\\CoreCursor\\SynchroniseDB\\instances\\POS\\sync-config.json",
+    "createdAtUtc":  "2026-11-26T08:55:37.5689319Z"
+}

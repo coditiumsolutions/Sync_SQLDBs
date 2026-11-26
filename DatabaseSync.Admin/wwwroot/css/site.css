@@ -44,8 +44,39 @@ html, body {
   color: #ffffff;
 }
 
-.nav-links .text-muted {
-  color: rgba(255, 255, 255, 0.75) !important;
+.nav-links .dropdown-toggle {
+  margin-left: 1rem;
+  color: rgba(255, 255, 255, 0.88);
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nav-links .dropdown-toggle:hover,
+.nav-links .dropdown-toggle:focus,
+.nav-links .dropdown-toggle.show {
+  color: #ffffff;
+}
+
+.nav-dropdown-menu {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(28, 43, 54, 0.12);
+  padding: 0.35rem 0;
+  min-width: 10.5rem;
+}
+
+.nav-dropdown-menu .dropdown-item {
+  margin-left: 0;
+  color: var(--ink);
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+}
+
+.nav-dropdown-menu .dropdown-item:hover,
+.nav-dropdown-menu .dropdown-item:focus {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .panel {
@@ -54,6 +85,17 @@ html, body {
   border-radius: 14px;
   padding: 1.25rem 1.4rem;
   box-shadow: 0 10px 30px rgba(28, 43, 54, 0.04);
+}
+
+.active-instance-banner {
+  background: var(--accent-soft);
+  border-color: #b7ddd1;
+}
+
+.active-instance-banner .h4,
+.active-instance-banner .h5 {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .panel + .panel {
@@ -96,6 +138,24 @@ html, body {
 .badge-target {
   background: #eef2f5;
   color: var(--muted);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.badge-status-ok {
+  background: #e7f5f0;
+  color: #0f6e56;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.badge-status-fail {
+  background: #fdecea;
+  color: #b42318;
   border-radius: 999px;
   padding: 0.2rem 0.55rem;
   font-size: 0.75rem;

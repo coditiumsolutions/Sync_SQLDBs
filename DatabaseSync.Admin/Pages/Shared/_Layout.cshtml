@@ -1,4 +1,9 @@
-﻿<!DOCTYPE html>
+﻿@using DatabaseSync.Admin.Services
+@inject ActiveInstanceInfo ActiveInstance
+@{
+    ActiveInstance.Refresh();
+}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -11,25 +16,59 @@
 <header class="app-header">
     <div class="container d-flex align-items-center justify-content-between py-3">
         <a class="brand" asp-page="/Index">Coditium Sync Admin</a>
-        <nav class="nav-links">
+        <nav class="nav-links d-flex align-items-center flex-wrap">
             <a asp-page="/Index">Dashboard</a>
+            <a asp-page="/Instances">Instances</a>
             <a asp-page="/Connections/Index">Connections</a>
-            <a asp-page="/Tables">Tables</a>
-            <a asp-page="/Settings">Settings</a>
-            <a asp-page="/History">History</a>
-            @if (User.IsInRole("Admin"))
-            {
-                <a asp-page="/Users">Users</a>
-            }
+            <div class="dropdown d-inline-block">
+                <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Other Actions
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end nav-dropdown-menu">
+                    <li><a class="dropdown-item" asp-page="/Tables">Tables</a></li>
+                    <li><a class="dropdown-item" asp-page="/Settings">Settings</a></li>
+                    <li><a class="dropdown-item" asp-page="/History">History</a></li>
+                    <li><a class="dropdown-item" asp-page="/Summary">Summary</a></li>
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <li><a class="dropdown-item" asp-page="/Users">Users</a></li>
+                    }
+                </ul>
+            </div>
             @if (User.Identity?.IsAuthenticated == true)
             {
-                <span class="ms-3 text-muted">@User.Identity.Name</span>
-                <a asp-page="/Logout">Logout</a>
+                <div class="dropdown d-inline-block">
+                    <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        @User.Identity.Name
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end nav-dropdown-menu">
+                        <li><a class="dropdown-item" asp-page="/Logout">Logout</a></li>
+                    </ul>
+                </div>
             }
         </nav>
     </div>
 </header>
 <main class="container py-4">
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <div class="panel mb-3 active-instance-banner">
+            <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                <div>
+                    <div class="form-hint mb-1">Active Instance</div>
+                    @if (!string.IsNullOrWhiteSpace(ActiveInstance.Name))
+                    {
+                        <div class="h5 mb-0">@ActiveInstance.Name</div>
+                    }
+                    else
+                    {
+                        <div class="h5 mb-0 text-muted">None</div>
+                    }
+                </div>
+                <a class="btn btn-sm btn-outline-secondary" asp-page="/Instances">Manage instances</a>
+            </div>
+        </div>
+    }
     @if (TempData["StatusMessage"] is string status && !string.IsNullOrWhiteSpace(status))
     {
         <div class="alert alert-success">@status</div>

@@ -1,0 +1,8 @@
+﻿{
+    "name":  "HR_BTK",
+    "port":  5088,
+    "adminUrl":  "http://127.0.0.1:5088",
+    "databaseHint":  "HR_BTK",
+    "configPath":  "D:\\Dotnet\\CoreCursor\\SynchroniseDB\\instances\\HR_BTK\\sync-config.json",
+    "createdAtUtc":  "2026-11-26T10:48:35.7217956Z"
+}

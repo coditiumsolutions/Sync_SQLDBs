@@ -15,6 +15,19 @@ DatabaseSync.sln
 
 Copy `DatabaseSync.Worker/sync-config.example.json` to `sync-config.json` and set real credentials. Never commit passwords. `sync-config.json` is gitignored.
 
+## Multiple products (POS, PMS, Restaurant, …)
+
+This UI syncs **one product at a time**. For several products, run **separate instances** (own folder, port, config, and management DB):
+
+```powershell
+.\instances\Publish-SharedRuntime.ps1
+.\instances\New-SyncInstance.ps1 -Name PMS -Port 5088 -Database RND_PMS_Sync
+.\instances\New-SyncInstance.ps1 -Name POS -Port 5089 -Database YourPosDb
+.\instances\Start-SyncInstance.ps1 -Name PMS
+```
+
+See [`instances/README.md`](instances/README.md) for start/stop/list and port map.
+
 ## Prerequisites
 
 - .NET 8 SDK

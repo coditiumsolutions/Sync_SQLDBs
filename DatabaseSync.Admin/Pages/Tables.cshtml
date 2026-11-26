@@ -21,7 +21,7 @@
             {
                 <text>(Main not set).</text>
             }
-            Only tables with a primary key can be synchronised.
+            Differential sync needs a primary key to match rows between Main and targets.
         </div>
         <div class="form-hint">Config: <code class="path">@Model.ConfigPath</code></div>
     </div>
@@ -73,6 +73,7 @@
                         <th>Schema</th>
                         <th>Table</th>
                         <th>Primary key</th>
+                        <th>Skip reason</th>
                         <th class="text-end">Approx. rows</th>
                     </tr>
                     </thead>
@@ -106,7 +107,19 @@
                                 }
                                 else
                                 {
-                                    <span class="badge-target">No — skipped</span>
+                                    <span class="badge-target">No</span>
+                                }
+                            </td>
+                            <td>
+                                @if (table.HasPrimaryKey)
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                else
+                                {
+                                    <span title="Add a primary key on Main (and the same key on each target) to enable sync.">
+                                        No primary key — sync cannot match insert/update/delete rows
+                                    </span>
                                 }
                             </td>
                             <td class="text-end">@table.ApproximateRowCount.ToString("N0")</td>

@@ -27,12 +27,14 @@
                     <th>Role</th>
                     <th>Server / Database</th>
                     <th>Enabled</th>
+                    <th>Status</th>
                     <th></th>
                 </tr>
                 </thead>
                 <tbody>
                 @foreach (var c in Model.Connections)
                 {
+                    Model.TestStatuses.TryGetValue(c.Id, out var testStatus);
                     <tr>
                         <td>
                             <strong>@c.Name</strong>
@@ -49,6 +51,20 @@
                         </td>
                         <td>@c.Server / @c.Database</td>
                         <td>@(c.IsEnabled ? "Yes" : "No")</td>
+                        <td>
+                            @if (testStatus is null)
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                            else if (testStatus.IsConnected)
+                            {
+                                <span class="badge-status-ok" title="@testStatus.Detail">Connected</span>
+                            }
+                            else
+                            {
+                                <span class="badge-status-fail" title="@testStatus.Detail">Fail Connection</span>
+                            }
+                        </td>
                         <td class="text-end text-nowrap">
                             <a class="btn btn-sm btn-outline-secondary" asp-page="./Edit" asp-route-id="@c.Id">Edit</a>
                             <form class="d-inline" method="post" asp-page-handler="Test">
