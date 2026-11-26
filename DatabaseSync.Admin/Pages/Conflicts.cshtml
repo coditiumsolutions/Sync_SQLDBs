@@ -22,17 +22,29 @@
 
 @if (!string.IsNullOrWhiteSpace(review.Warning))
 {
-    <div class="alert alert-danger" role="alert">@review.Warning</div>
+    <div class="alert alert-danger" role="alert">
+        <partial name="_Icon" model='"alert"' />
+        <span>@review.Warning</span>
+    </div>
 }
 
 <ul class="figures">
-    <li><span class="fig-num">@review.PendingCount</span><small>Pending in view</small></li>
-    <li><span class="fig-num">@review.Entries.Count</span><small>Log rows shown</small></li>
-    <li><span class="fig-num">@review.Files.Count</span><small>Backup files</small></li>
+    <li>
+        <span class="fig-num">@review.PendingCount</span>
+        <small><partial name="_Icon" model='"pending"' /> Pending in view</small>
+    </li>
+    <li>
+        <span class="fig-num">@review.Entries.Count</span>
+        <small><partial name="_Icon" model='"log"' /> Log rows shown</small>
+    </li>
+    <li>
+        <span class="fig-num">@review.Files.Count</span>
+        <small><partial name="_Icon" model='"file"' /> Backup files</small>
+    </li>
 </ul>
 
 <section class="section">
-    <p class="eyebrow">Log</p>
+    <p class="eyebrow"><partial name="_Icon" model='"log"' /> Log</p>
     <h2>Flagged rows</h2>
     @if (!review.LogFound)
     {
@@ -73,7 +85,10 @@
                         <span class="muted">@entry.Trigger</span>
                         @if (entry.DryRun)
                         {
-                            <span class="pill off">Dry run</span>
+                            <span class="pill off">
+                                <partial name="_Icon" model='"dry"' />
+                                <span>Dry run</span>
+                            </span>
                         }
                         <div class="hint">Target @((entry.TargetChangeTimestamp ?? "—")) · Main @((entry.MainChangeTimestamp ?? "—"))</div>
                         @if (!string.IsNullOrWhiteSpace(entry.Preview))
@@ -85,7 +100,12 @@
                             <div class="mono muted">@entry.BackupFile</div>
                         }
                     </td>
-                    <td><span class="pill @(entry.ReviewStatus.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "bad" : "on")">@entry.ReviewStatus</span></td>
+                    <td>
+                        <span class="pill @(entry.ReviewStatus.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "bad" : "on")">
+                            <partial name="_Icon" model='@(entry.ReviewStatus.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "pending" : "check")' />
+                            <span>@entry.ReviewStatus</span>
+                        </span>
+                    </td>
                 </tr>
             }
             </tbody>
@@ -94,7 +114,7 @@
 </section>
 
 <section class="section">
-    <p class="eyebrow">Files</p>
+    <p class="eyebrow"><partial name="_Icon" model='"folder"' /> Files</p>
     <h2>Backups</h2>
     <p class="hint">Folder <span class="mono">@review.Folder</span>. A small set is one JSON file. A large set is JSONL, or a <span class="mono">sync.ConflictBackup_*</span> table on the target when that option is on. Tables are not listed here.</p>
     @if (review.Files.Count == 0)
@@ -116,7 +136,12 @@
             @foreach (var file in review.Files)
             {
                 <tr>
-                    <td class="mono">@file.RelativePath</td>
+                    <td class="mono">
+                        <span class="file-cell">
+                            <svg class="ico" aria-hidden="true"><use href="#ico-file"></use></svg>
+                            <span>@file.RelativePath</span>
+                        </span>
+                    </td>
                     <td>@file.Kind</td>
                     <td class="mono">@Size(file.Bytes)</td>
                     <td class="mono">@When(file.ModifiedUtc)</td>

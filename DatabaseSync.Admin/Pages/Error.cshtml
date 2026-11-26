@@ -4,7 +4,7 @@
     ViewData["Title"] = "Error";
 }
 
-<p class="eyebrow">Desk</p>
+<p class="eyebrow"><partial name="_Icon" model='"alert"' /> Desk</p>
 <h1>Something broke</h1>
 <p class="lede">The page did not finish. The sync config was not changed by this error.</p>
 
@@ -13,4 +13,9 @@
     <p class="hint">Request <span class="mono">@Model.RequestId</span></p>
 }
 
-<p style="margin-top:1rem"><a class="text-btn" asp-page="/Index">Back to the desk</a></p>
+<p style="margin-top:1rem">
+    <a class="icon-btn" asp-page="/Index">
+        <partial name="_Icon" model='"desk"' />
+        <span>Back to the desk</span>
+    </a>
+</p>

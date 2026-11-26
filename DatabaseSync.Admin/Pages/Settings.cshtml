@@ -7,7 +7,7 @@
 <form method="post" id="settingsForm">
     <div class="form-head">
         <div>
-            <p class="eyebrow">Triggers</p>
+            <p class="eyebrow"><partial name="_Icon" model='"triggers"' /> Triggers</p>
             <h1>When a cycle starts</h1>
             <p class="lede">Manual is the Sync now button on the desk. It is always armed. Auto and interval are configured here and stay quiet until you turn them on.</p>
         </div>
@@ -20,6 +20,7 @@
     @if (!Model.OneWaySyncEnabled)
     {
         <div class="alert alert-danger">
+            <partial name="_Icon" model='"alert"' />
             <label class="check">
                 <input asp-for="Input.RestoreOneWaySync" />
                 <span>One-way sync is off, so cycles do nothing. Turn it back on with this save.</span>
@@ -61,11 +62,11 @@
                     <div class="segment" role="radiogroup" aria-label="How this time is specified">
                         <label>
                             <input class="mode-clock" type="radio" name="Input.Schedules[@i].UseCron" value="false" checked="@(!schedule.UseCron)" />
-                            <span>Clock</span>
+                            <span><partial name="_Icon" model='"clock"' /> Clock</span>
                         </label>
                         <label>
                             <input class="mode-cron" type="radio" name="Input.Schedules[@i].UseCron" value="true" checked="@schedule.UseCron" />
-                            <span>Cron</span>
+                            <span><partial name="_Icon" model='"cron"' /> Cron</span>
                         </label>
                     </div>
                     <button type="submit" class="icon-btn danger" asp-page-handler="RemoveSchedule" asp-route-index="@i">
@@ -144,34 +145,34 @@
     </section>
 
     <section class="section" id="conflicts">
-        <p class="eyebrow">After a conflict</p>
+        <p class="eyebrow"><partial name="_Icon" model='"conflicts"' /> After a conflict</p>
         <h2>What gets kept</h2>
-        <p class="lede">Main always wins. A target row is flagged only when it is strictly newer. The row is backed up, then main is applied. Review the copies on the <a asp-page="/Conflicts">Conflicts</a> page.</p>
+        <p class="lede">Main always wins. A target row is flagged only when it is strictly newer. The row is backed up, then main is applied. Review the copies on the <a asp-page="/Conflicts" class="icon-btn inline-link"><partial name="_Icon" model='"conflicts"' /><span>Conflicts</span></a> page.</p>
         <label class="option">
             <input asp-for="Input.DryRun" />
             <span>
-                <strong>Dry run</strong>
+                <strong><partial name="_Icon" model='"dry"' /> Dry run</strong>
                 <small>Compute the diff and write review files. Do not change target data.</small>
             </span>
         </label>
         <label class="option">
             <input asp-for="Input.AssumeDifferingRowsConflict" />
             <span>
-                <strong>Back up every differing target row</strong>
+                <strong><partial name="_Icon" model='"folder"' /> Back up every differing target row</strong>
                 <small>Even when the table has no change-timestamp column, or the target is not newer. Off, because it can be large.</small>
             </span>
         </label>
         <label class="option">
             <input asp-for="Input.UseConflictBackupTables" />
             <span>
-                <strong>Large conflicts go to a backup table</strong>
+                <strong><partial name="_Icon" model='"endpoint"' /> Large conflicts go to a backup table</strong>
                 <small>Off. Creates <span class="mono">sync.ConflictBackup_*</span> on the target. Otherwise a large set is a JSONL file.</small>
             </span>
         </label>
         <label class="option">
             <input asp-for="Input.WriteConflictLogTable" />
             <span>
-                <strong>Also write sync.ConflictLog on the target</strong>
+                <strong><partial name="_Icon" model='"log"' /> Also write sync.ConflictLog on the target</strong>
                 <small>Off. The JSONL log is always written and is what this desk reads.</small>
             </span>
         </label>
@@ -198,12 +199,12 @@
     </section>
 
     <section class="section" id="engine">
-        <p class="eyebrow">Engine</p>
+        <p class="eyebrow"><partial name="_Icon" model='"engine"' /> Engine</p>
         <h2>Retries and logging</h2>
         <label class="option">
             <input asp-for="Input.EnableDetailedLogging" />
             <span>
-                <strong>Detailed logging</strong>
+                <strong><partial name="_Icon" model='"log"' /> Detailed logging</strong>
                 <small>Write extra diagnostic lines for each cycle.</small>
             </span>
         </label>

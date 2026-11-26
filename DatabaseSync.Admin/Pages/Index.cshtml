@@ -25,6 +25,21 @@
     }
     string Mark(string? outcome) => outcome is "Synced" or "Source" or "Connected" ? "mark-ok"
         : outcome is "Failed" ? "mark-bad" : "mark-muted";
+    string OutcomeIcon(string? outcome) => outcome switch
+    {
+        "Synced" or "Connected" => "check",
+        "Source" => "source",
+        "Failed" => "x",
+        _ => "dot"
+    };
+    string StateIcon(string? state) => state switch
+    {
+        "Running" => "sync",
+        "Succeeded" => "check",
+        "Failed" => "x",
+        "Skipped" => "cancel",
+        _ => "dot"
+    };
     string Pill(string? state) => state switch
     {
         "Running" => "run",
@@ -40,11 +55,12 @@
             : "every day";
         return $"{entry.Time} · {days}";
     }
+    var stateLabel = string.IsNullOrWhiteSpace(status.State) ? "Idle" : status.State;
 }
 
 <div class="page-head">
     <div>
-        <p class="eyebrow">Cycle control</p>
+        <p class="eyebrow"><partial name="_Icon" model='"cycle"' /> Cycle control</p>
         <h1>Desk</h1>
     </div>
     <p class="lede">Manual runs from here. Auto and interval wait for the worker. Only one cycle holds the lock.</p>
@@ -53,8 +69,8 @@
 @if (!Model.OneWaySyncEnabled)
 {
     <div class="alert alert-danger" role="alert">
-        One-way sync is off in the config file, so no cycle will copy data.
-        <a asp-page="/Settings">Turn it back on</a>.
+        <partial name="_Icon" model='"alert"' />
+        <span>One-way sync is off in the config file, so no cycle will copy data. <a asp-page="/Settings">Turn it back on</a>.</span>
     </div>
 }
 
@@ -67,7 +83,10 @@
                 <p class="eyebrow"><partial name="_Icon" model='"manual"' /> 01 · Manual</p>
                 <h2 id="manual-title">Sync now</h2>
             </div>
-            <span class="pill @Pill(status.State)" id="statePill">@(string.IsNullOrWhiteSpace(status.State) ? "Idle" : status.State)</span>
+            <span class="pill @Pill(status.State)" id="statePill">
+                <svg class="ico" aria-hidden="true" focusable="false"><use href="#ico-@StateIcon(status.State)"></use></svg>
+                <span>@stateLabel</span>
+            </span>
         </div>
         <p class="hint">One differential cycle. Always armed. A click during another cycle waits, then runs once.</p>
         <form method="post" asp-page-handler="SyncNow" class="split-actions" style="margin-top:0.9rem">
@@ -98,7 +117,10 @@
                     <p class="eyebrow"><partial name="_Icon" model='"triggers"' /> 02 · Auto</p>
                     <h2 id="auto-title">Times</h2>
                 </div>
-                <span class="pill @(settings.ScheduledSyncEnabled ? "on" : "off")">@(settings.ScheduledSyncEnabled ? "On" : "Off")</span>
+                <span class="pill @(settings.ScheduledSyncEnabled ? "on" : "off")">
+                    <partial name="_Icon" model='@(settings.ScheduledSyncEnabled ? "check" : "dot")' />
+                    <span>@(settings.ScheduledSyncEnabled ? "On" : "Off")</span>
+                </span>
             </div>
             @if (settings.Schedules.Count == 0)
             {
@@ -110,7 +132,10 @@
                     @foreach (var entry in settings.Schedules)
                     {
                         <li class="@(entry.Enabled ? "" : "off")">
-                            <span>@Describe(entry)</span>
+                            <span>
+                                <svg class="ico" aria-hidden="true"><use href="#ico-@(string.IsNullOrWhiteSpace(entry.Cron) ? "clock" : "cron")"></use></svg>
+                                @Describe(entry)
+                            </span>
                             <span>@(entry.Enabled ? "armed" : "off")</span>
                         </li>
                     }
@@ -128,7 +153,10 @@
                     <p class="eyebrow"><partial name="_Icon" model='"interval"' /> 03 · Interval</p>
                     <h2 id="interval-title">Every @settings.IntervalValue @settings.IntervalUnit</h2>
                 </div>
-                <span class="pill @(settings.IntervalSyncEnabled ? "on" : "off")" id="intervalPill">@(settings.IntervalSyncEnabled ? "On" : "Off")</span>
+                <span class="pill @(settings.IntervalSyncEnabled ? "on" : "off")" id="intervalPill">
+                    <partial name="_Icon" model='@(settings.IntervalSyncEnabled ? "check" : "dot")' />
+                    <span>@(settings.IntervalSyncEnabled ? "On" : "Off")</span>
+                </span>
             </div>
             <p class="hint">@(settings.IntervalSyncEnabled ? "Armed. Missed ticks are not replayed." : "Off until you arm it. That is the default, because each cycle hashes every syncable table.")</p>
             <p class="hint">Next <strong id="nextIntervalText">@(settings.IntervalSyncEnabled ? When(Model.NextIntervalRunUtc) : "off")</strong></p>
@@ -143,7 +171,7 @@
 <section class="ledger" aria-labelledby="last-title">
     <div class="plate-head">
         <div>
-            <p class="eyebrow">Last cycle</p>
+            <p class="eyebrow"><partial name="_Icon" model='"ledger"' /> Last cycle</p>
             <h2 id="last-title">What moved</h2>
         </div>
         <a class="icon-btn" asp-page="/Conflicts">
@@ -152,16 +180,28 @@
         </a>
     </div>
     <ul class="figures">
-        <li><span class="fig-num" id="figInserted">@status.RowsInserted</span><small>Inserted</small></li>
-        <li><span class="fig-num" id="figUpdated">@status.RowsUpdated</span><small>Updated</small></li>
-        <li><span class="fig-num" id="figDeleted">@status.RowsDeleted</span><small>Deleted</small></li>
+        <li>
+            <span class="fig-num" id="figInserted">@status.RowsInserted</span>
+            <small><partial name="_Icon" model='"insert"' /> Inserted</small>
+        </li>
+        <li>
+            <span class="fig-num" id="figUpdated">@status.RowsUpdated</span>
+            <small><partial name="_Icon" model='"update"' /> Updated</small>
+        </li>
+        <li>
+            <span class="fig-num" id="figDeleted">@status.RowsDeleted</span>
+            <small><partial name="_Icon" model='"delete"' /> Deleted</small>
+        </li>
         <li>
             <a asp-page="/Conflicts">
                 <span class="fig-num" id="figConflicted">@status.RowsConflicted</span>
-                <small>Flagged</small>
+                <small><partial name="_Icon" model='"conflicts"' /> Flagged</small>
             </a>
         </li>
-        <li><span class="fig-num" id="figBytes">@Bytes(status.EstimatedBytesTransferred)</span><small>Sent</small></li>
+        <li>
+            <span class="fig-num" id="figBytes">@Bytes(status.EstimatedBytesTransferred)</span>
+            <small><partial name="_Icon" model='"bytes"' /> Sent</small>
+        </li>
     </ul>
     <div class="table-wrap">
         <table class="ledger-table">
@@ -190,9 +230,19 @@
                             <strong>@server.Name</strong>
                             <div class="mono muted">@server.Server / @server.Database</div>
                         </td>
-                        <td>@(server.IsMain ? "Main" : "Target")</td>
+                        <td>
+                            <span class="pill @(server.IsMain ? "on" : "off")">
+                                <svg class="ico" aria-hidden="true"><use href="#ico-@(server.IsMain ? "star" : "link")"></use></svg>
+                                <span>@(server.IsMain ? "Main" : "Target")</span>
+                            </span>
+                        </td>
                         <td class="mono">@server.TablesOk ok · @server.TablesFailed failed</td>
-                        <td><span class="pill @Mark(server.Outcome)">@server.Outcome</span></td>
+                        <td>
+                            <span class="pill @Mark(server.Outcome)">
+                                <svg class="ico" aria-hidden="true"><use href="#ico-@OutcomeIcon(server.Outcome)"></use></svg>
+                                <span>@server.Outcome</span>
+                            </span>
+                        </td>
                         <td>@server.Reason</td>
                     </tr>
                 }
@@ -201,13 +251,14 @@
         </table>
     </div>
     <p class="hint" style="margin-top:0.8rem">
+        <partial name="_Icon" model='"connections"' />
         @Model.Configuration.Connections.Count connections · @enabled enabled · @(main?.Name ?? "No main") is the source · @targets @(targets == 1 ? "target" : "targets")
     </p>
 </section>
 
 <footer class="worker">
     <div>
-        <p class="eyebrow">Worker</p>
+        <p class="eyebrow"><partial name="_Icon" model='"worker"' /> Worker</p>
         <strong>@(Model.ServiceStatus.IsRunning ? "Running" : "Stopped")</strong>
         <span class="muted">@(Model.ServiceStatus.UsesWindowsService ? "Windows service" : "Process")</span>
         <p class="hint">Auto and interval need the worker. Sync now runs in this site when the lock is free.</p>
@@ -284,10 +335,21 @@
             .replaceAll('"', '&quot;');
     }
 
+    function icon(name) {
+        return `<svg class="ico" aria-hidden="true" focusable="false"><use href="#ico-${name}"></use></svg>`;
+    }
+
     function mark(outcome) {
         if (outcome === 'Synced' || outcome === 'Source' || outcome === 'Connected') return 'mark-ok';
         if (outcome === 'Failed') return 'mark-bad';
         return 'mark-muted';
+    }
+
+    function outcomeIcon(outcome) {
+        if (outcome === 'Synced' || outcome === 'Connected') return 'check';
+        if (outcome === 'Source') return 'source';
+        if (outcome === 'Failed') return 'x';
+        return 'dot';
     }
 
     function pill(state) {
@@ -297,18 +359,31 @@
         return 'off';
     }
 
+    function stateIcon(state) {
+        if (state === 'Running') return 'sync';
+        if (state === 'Succeeded') return 'check';
+        if (state === 'Failed') return 'x';
+        if (state === 'Skipped') return 'cancel';
+        return 'dot';
+    }
+
     function renderServers(servers) {
         if (!servers || servers.length === 0) {
             body.innerHTML = '<tr><td colspan="5" class="muted">No cycle has finished yet.</td></tr>';
             return;
         }
-        body.innerHTML = servers.map(server => `<tr>
+        body.innerHTML = servers.map(server => {
+            const roleIcon = server.isMain ? 'star' : 'link';
+            const roleLabel = server.isMain ? 'Main' : 'Target';
+            const roleClass = server.isMain ? 'on' : 'off';
+            return `<tr>
             <td><strong>${escapeHtml(server.name)}</strong><div class="mono muted">${escapeHtml(server.server)} / ${escapeHtml(server.database)}</div></td>
-            <td>${server.isMain ? 'Main' : 'Target'}</td>
+            <td><span class="pill ${roleClass}">${icon(roleIcon)}<span>${roleLabel}</span></span></td>
             <td class="mono">${server.tablesOk || 0} ok · ${server.tablesFailed || 0} failed</td>
-            <td><span class="pill ${mark(server.outcome)}">${escapeHtml(server.outcome)}</span></td>
+            <td><span class="pill ${mark(server.outcome)}">${icon(outcomeIcon(server.outcome))}<span>${escapeHtml(server.outcome)}</span></span></td>
             <td>${escapeHtml(server.reason)}</td>
-        </tr>`).join('');
+        </tr>`;
+        }).join('');
     }
 
     async function refreshStatus() {
@@ -317,8 +392,8 @@
             if (!response.ok) return;
             const status = await response.json();
             const state = status.state || 'Idle';
-            statePill.textContent = state;
             statePill.className = 'pill ' + pill(state);
+            statePill.innerHTML = `${icon(stateIcon(state))}<span>${escapeHtml(state)}</span>`;
             track.dataset.state = state;
             message.textContent = status.message || '';
             triggerText.textContent = status.lastTrigger || '—';
@@ -342,12 +417,14 @@
             }
             if (state === 'Running') {
                 banner.className = 'alert alert-info';
-                banner.textContent = status.message || 'Differential sync is in progress.';
+                banner.innerHTML = `${icon('sync')}<span>${escapeHtml(status.message || 'Differential sync is in progress.')}</span>`;
                 banner.classList.remove('d-none');
             } else if (key !== seenKey && (state === 'Succeeded' || state === 'Failed' || state === 'Skipped')) {
                 seenKey = key;
-                banner.className = state === 'Succeeded' ? 'alert alert-success' : state === 'Failed' ? 'alert alert-danger' : 'alert alert-warning';
-                banner.textContent = status.message || state;
+                const kind = state === 'Succeeded' ? 'success' : state === 'Failed' ? 'danger' : 'warning';
+                const glyph = state === 'Succeeded' ? 'check' : state === 'Failed' ? 'x' : 'cancel';
+                banner.className = 'alert alert-' + kind;
+                banner.innerHTML = `${icon(glyph)}<span>${escapeHtml(status.message || state)}</span>`;
                 banner.classList.remove('d-none');
             }
         } catch (e) { }

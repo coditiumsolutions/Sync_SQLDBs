@@ -180,8 +180,7 @@ a { color: var(--oxide); }
 .btn-ink,
 .btn-ghost,
 .btn-sync,
-.icon-btn,
-.alert {
+.icon-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -453,11 +452,18 @@ button:disabled, .btn-ghost:disabled {
 
 .figures small, .muted { color: var(--soft); }
 .figures small {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   margin-top: 0.25rem;
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.figures small .ico {
+  width: 0.78rem;
+  height: 0.78rem;
+  color: var(--brass);
 }
 
 .ledger-table { width: 100%; border-collapse: collapse; }
@@ -650,8 +656,75 @@ select.line { background: var(--sheet); }
   border-bottom: 1px solid var(--rule);
   cursor: pointer;
 }
-.option strong { display: block; }
-.option small { color: var(--soft); }
+.option strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.option strong .ico {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--brass);
+  flex: none;
+}
+.option small { display: block; color: var(--soft); }
+
+.inline-link {
+  display: inline-flex;
+  vertical-align: baseline;
+}
+
+.file-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.file-cell .ico {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--brass);
+  flex: none;
+}
+
+.check span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.check .ico {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--brass);
+}
+
+.segment label span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.segment .ico {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.time-list li > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.time-list .ico {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--brass);
+  flex: none;
+}
+
+.hint .ico {
+  width: 0.85rem;
+  height: 0.85rem;
+  vertical-align: -0.15em;
+  color: var(--brass);
+}
 
 .check {
   display: flex;
@@ -667,6 +740,9 @@ select.line { background: var(--sheet); }
 }
 
 .alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
   border: 0;
   border-left: 6px solid var(--ok);
   border-radius: 0;
@@ -676,7 +752,7 @@ select.line { background: var(--sheet); }
   margin: 0 0 1rem;
 }
 
-.alert .ico { width: 1rem; height: 1rem; flex: none; }
+.alert .ico { width: 1rem; height: 1rem; flex: none; margin-top: 0.1rem; }
 .alert-danger { border-left-color: var(--oxide); background: var(--oxide-soft); }
 .alert-warning, .alert-info { border-left-color: var(--brass); background: var(--brass-soft); }
 

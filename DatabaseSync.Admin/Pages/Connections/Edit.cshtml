@@ -7,7 +7,7 @@
 <form method="post">
     <div class="form-head">
         <div>
-            <p class="eyebrow">Topology</p>
+            <p class="eyebrow"><partial name="_Icon" model='"connections"' /> Topology</p>
             <h1>@ViewData["Title"]</h1>
         </div>
         <div class="split-actions">
@@ -24,7 +24,7 @@
     <input type="hidden" asp-for="Input.Id" />
 
     <section class="section">
-        <p class="eyebrow">Identity</p>
+        <p class="eyebrow"><partial name="_Icon" model='"identity"' /> Identity</p>
         <div class="grid-2">
             <div class="field">
                 <label class="line-label" asp-for="Input.Name"></label>
@@ -34,18 +34,18 @@
             <div>
                 <label class="check">
                     <input asp-for="Input.IsMain" />
-                    <span>Nominate as Main</span>
+                    <span><partial name="_Icon" model='"star"' /> Nominate as Main</span>
                 </label>
                 <label class="check">
                     <input asp-for="Input.IsEnabled" />
-                    <span>Enabled</span>
+                    <span><partial name="_Icon" model='"check"' /> Enabled</span>
                 </label>
             </div>
         </div>
     </section>
 
     <section class="section">
-        <p class="eyebrow">Endpoint</p>
+        <p class="eyebrow"><partial name="_Icon" model='"endpoint"' /> Endpoint</p>
         <div class="grid-2">
             <div class="field">
                 <label class="line-label" asp-for="Input.Server"></label>
@@ -65,7 +65,7 @@
     </section>
 
     <section class="section">
-        <p class="eyebrow">Authentication</p>
+        <p class="eyebrow"><partial name="_Icon" model='"auth"' /> Authentication</p>
         <label class="check">
             <input asp-for="Input.IntegratedSecurity" />
             <span>Windows authentication</span>
