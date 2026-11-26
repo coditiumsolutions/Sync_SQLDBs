@@ -47,6 +47,24 @@ public class IndexModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostSetEnabledAsync(string id, bool enabled)
+    {
+        var config = await _configStore.GetAsync();
+        var selected = config.Connections.FirstOrDefault(c => c.Id == id);
+        if (selected is null)
+        {
+            TempData["ErrorMessage"] = "Connection not found.";
+            return RedirectToPage();
+        }
+
+        selected.IsEnabled = enabled;
+        await _configStore.SaveAsync(config);
+        TempData["StatusMessage"] = enabled
+            ? $"'{selected.Name}' is enabled."
+            : $"'{selected.Name}' is disabled and will be skipped.";
+        return RedirectToPage();
+    }
+
     public async Task<IActionResult> OnPostDeleteAsync(string id)
     {
         var config = await _configStore.GetAsync();

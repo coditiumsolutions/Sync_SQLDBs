@@ -37,7 +37,7 @@ else
         <tbody>
         @foreach (var connection in Model.Connections)
         {
-            <tr>
+            <tr class="@(connection.IsEnabled ? null : "is-disabled")">
                 <td><strong>@connection.Name</strong></td>
                 <td>
                     @if (connection.IsMain)
@@ -50,7 +50,20 @@ else
                     }
                 </td>
                 <td class="mono">@connection.Server / @connection.Database</td>
-                <td>@(connection.IsEnabled ? "Yes" : "No")</td>
+                <td>
+                    <form method="post" asp-page-handler="SetEnabled" class="enable-form">
+                        <input type="hidden" name="id" value="@connection.Id" />
+                        <input type="hidden" name="enabled" value="@(connection.IsEnabled ? "true" : "false")" class="enabled-value" />
+                        <label class="arm arm-compact">
+                            <input type="checkbox"
+                                   checked="@connection.IsEnabled"
+                                   onchange="this.form.querySelector('.enabled-value').value = this.checked ? 'true' : 'false'; this.form.submit();"
+                                   aria-label="@(connection.IsEnabled ? $"Disable {connection.Name}" : $"Enable {connection.Name}")" />
+                            <span class="arm-ui" aria-hidden="true"></span>
+                            <span class="hint">@(connection.IsEnabled ? "On" : "Off")</span>
+                        </label>
+                    </form>
+                </td>
                 <td>
                     <div class="row-actions">
                         <a class="text-btn" asp-page="./Edit" asp-route-id="@connection.Id">Edit</a>

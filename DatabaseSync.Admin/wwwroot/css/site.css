@@ -473,6 +473,25 @@ button:disabled, .btn-ghost:disabled {
 .arm input[type="checkbox"]:checked ~ .arm-ui::after { transform: translateX(22px); }
 .arm input[type="checkbox"]:focus-visible ~ .arm-ui { outline: 2px solid var(--brass); outline-offset: 3px; }
 
+.arm-compact { gap: 0.45rem; font-weight: 400; }
+.arm-compact .arm-ui {
+  width: 42px;
+  height: 24px;
+}
+.arm-compact .arm-ui::after {
+  width: 16px;
+  height: 16px;
+  top: 4px;
+  left: 4px;
+}
+.arm-compact input[type="checkbox"]:checked ~ .arm-ui::after { transform: translateX(18px); }
+.arm-compact .hint { margin: 0; font-size: 0.78rem; }
+
+.enable-form { margin: 0; }
+
+.ledger-table tr.is-disabled td { color: var(--soft); }
+.ledger-table tr.is-disabled strong { color: var(--soft); font-weight: 400; }
+
 .time-row {
   border-top: 1px solid var(--rule);
   padding: 0.85rem 0;
