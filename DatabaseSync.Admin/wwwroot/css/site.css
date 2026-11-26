@@ -17,9 +17,9 @@ html, body {
 }
 
 .app-header {
-  background: var(--accent);
-  border-bottom: 1px solid #0c5a46;
-  box-shadow: 0 2px 10px rgba(15, 110, 86, 0.25);
+  background: #000000;
+  border-bottom: 1px solid #1a1a1a;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 .brand {
