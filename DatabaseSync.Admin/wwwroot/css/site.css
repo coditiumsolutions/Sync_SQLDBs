@@ -62,6 +62,10 @@
   --body: "Atkinson Hyperlegible", "Avenir Next", "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   --shadow: 0 22px 50px rgba(48, 28, 12, 0.08);
+  /* Wide enough for tables/forms; modest gutters remain on 1920+ monitors. */
+  --sheet-max: 1680px;
+  --sheet-gutter: 2.5rem;
+  --prose-max: 44rem;
 }
 
 * { box-sizing: border-box; }
@@ -90,9 +94,9 @@ a { color: var(--oxide); }
 
 .sheet {
   position: relative;
-  width: min(1080px, calc(100% - 2.2rem));
+  width: min(var(--sheet-max), calc(100% - var(--sheet-gutter)));
   margin: 1.4rem auto 2.6rem;
-  padding: 1.35rem 1.55rem 1.3rem 1.9rem;
+  padding: 1.45rem clamp(1.25rem, 2.2vw, 2.1rem) 1.4rem clamp(1.55rem, 2.4vw, 2.35rem);
   background: var(--sheet);
   border: 1px solid #c9b79f;
   box-shadow: var(--shadow);
@@ -210,15 +214,28 @@ a { color: var(--oxide); }
 
 .pill .ico { width: 0.78rem; height: 0.78rem; }
 
-.status-cell { max-width: 18rem; }
+.status-cell {
+  max-width: 28rem;
+  min-width: 12rem;
+}
 .status-detail {
   margin-top: 0.25rem;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.connections-table td:nth-child(4) { min-width: 11rem; }
+.connections-table td:nth-child(3),
+.connections-table td:nth-child(4) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.connections-table td:nth-child(4) { min-width: 12rem; }
+.connections-table .row-actions {
+  justify-content: flex-end;
+  max-width: 18rem;
+}
 
 .page-head,
 .form-head {
@@ -262,12 +279,12 @@ h2 { font-size: 1.7rem; line-height: 1; }
   margin: 0.35rem 0 0;
 }
 
-.lede { max-width: 42rem; }
+.lede { max-width: var(--prose-max); }
 
 .desk {
   display: grid;
-  grid-template-columns: 1.35fr 0.85fr;
-  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 0.9fr);
+  gap: 1rem;
   margin-bottom: 0.9rem;
 }
 
@@ -466,7 +483,11 @@ button:disabled, .btn-ghost:disabled {
   color: var(--brass);
 }
 
-.ledger-table { width: 100%; border-collapse: collapse; }
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
 .ledger-table th {
   text-align: left;
   font-size: 0.7rem;
@@ -599,12 +620,12 @@ button:disabled, .btn-ghost:disabled {
 
 .clock-line, .pair, .grid-2, .grid-3 {
   display: grid;
-  gap: 0.8rem;
+  gap: 0.8rem 1rem;
 }
-.clock-line { grid-template-columns: 140px 1fr; align-items: end; }
-.pair { grid-template-columns: 140px 180px; }
-.grid-2 { grid-template-columns: 1fr 1fr; }
-.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.clock-line { grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr); align-items: end; }
+.pair { grid-template-columns: minmax(8rem, 10rem) minmax(10rem, 14rem); }
+.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .days { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .day { position: relative; margin: 0; cursor: pointer; }
@@ -795,6 +816,19 @@ select.line { background: var(--sheet); }
   .track[data-state="Running"] .track-fill { width: 70%; }
 }
 
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1100px) {
+  .desk {
+    grid-template-columns: minmax(0, 1.25fr) minmax(14rem, 0.95fr);
+  }
+}
+
 @media (max-width: 860px) {
   .desk, .figures, .clock-line, .pair, .grid-2, .grid-3, .worker, .mast, .page-head, .form-head {
     grid-template-columns: 1fr;
@@ -803,5 +837,9 @@ select.line { background: var(--sheet); }
   .mast, .page-head, .form-head, .worker { display: flex; flex-direction: column; align-items: flex-start; }
   .nav-links { justify-content: flex-start; }
   .figures { grid-template-columns: repeat(2, 1fr); }
-  .sheet { width: min(100% - 1rem, 1080px); padding-right: 0.9rem; }
+  .sheet {
+    width: min(calc(100% - 1rem), var(--sheet-max));
+    padding: 1.1rem 0.95rem 1.15rem 1.35rem;
+    margin-top: 0.8rem;
+  }
 }
