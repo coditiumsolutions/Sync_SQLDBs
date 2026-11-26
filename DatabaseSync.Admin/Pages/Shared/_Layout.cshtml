@@ -1,37 +1,52 @@
-﻿<!DOCTYPE html>
+﻿@inject DatabaseSync.Core.Interfaces.ISyncConfigStore ConfigStore
+@{
+    var path = Context.Request.Path.Value ?? "/";
+    string Here(string prefix) =>
+        path.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+        (prefix != "/" && path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            ? "is-here"
+            : "";
+    var desk = path is "/" or "/Index" ? "is-here" : "";
+}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Coditium Database Sync Admin</title>
+    <title>@ViewData["Title"] - Coditium Sync Desk</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
-<header class="app-header">
-    <div class="container d-flex align-items-center justify-content-between py-3">
-        <a class="brand" asp-page="/Index">Coditium Sync Admin</a>
+<div class="sheet">
+    <header class="mast">
+        <a class="brand" asp-page="/Index">
+            <span class="brand-kicker">Coditium</span>
+            <span class="brand-name">Sync desk</span>
+        </a>
         <nav class="nav-links">
-            <a asp-page="/Index">Dashboard</a>
-            <a asp-page="/Connections/Index">Connections</a>
-            <a asp-page="/Settings">Settings</a>
+            <a class="@desk" asp-page="/Index">Desk</a>
+            <a class="@Here("/Connections")" asp-page="/Connections/Index">Connections</a>
+            <a class="@Here("/Settings")" asp-page="/Settings">Triggers</a>
+            <a class="@Here("/Conflicts")" asp-page="/Conflicts">Conflicts</a>
         </nav>
-    </div>
-</header>
-<main class="container py-4">
+    </header>
     @if (TempData["StatusMessage"] is string status && !string.IsNullOrWhiteSpace(status))
     {
-        <div class="alert alert-success">@status</div>
+        <div class="alert alert-success" role="status">@status</div>
     }
     @if (TempData["ErrorMessage"] is string error && !string.IsNullOrWhiteSpace(error))
     {
-        <div class="alert alert-danger">@error</div>
+        <div class="alert alert-danger" role="alert">@error</div>
     }
-    @RenderBody()
-</main>
-<footer class="container py-4 text-muted small">
-    Shared config file drives both the Admin UI and the Windows Worker service.
-</footer>
+    <main>
+        @RenderBody()
+    </main>
+    <footer class="colophon">
+        <span>One config file drives this desk and the worker.</span>
+        <code>@ConfigStore.ConfigFilePath</code>
+    </footer>
+</div>
 <script src="~/lib/jquery/dist/jquery.min.js"></script>
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
 @await RenderSectionAsync("Scripts", required: false)

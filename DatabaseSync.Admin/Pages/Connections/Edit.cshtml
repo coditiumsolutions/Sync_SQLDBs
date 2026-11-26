@@ -4,77 +4,87 @@
     ViewData["Title"] = Model.IsNew ? "Add connection" : "Edit connection";
 }
 
-<h1 class="h3 mb-3">@ViewData["Title"]</h1>
-
-<div class="panel">
-    <form method="post" class="row g-3">
-        <input type="hidden" asp-for="Input.Id" />
-
-        <div class="col-md-6">
-            <label asp-for="Input.Name" class="form-label"></label>
-            <input asp-for="Input.Name" class="form-control" />
-            <span asp-validation-for="Input.Name" class="text-danger"></span>
+<form method="post">
+    <div class="form-head">
+        <div>
+            <p class="eyebrow">Topology</p>
+            <h1>@ViewData["Title"]</h1>
         </div>
-
-        <div class="col-md-3 form-check mt-4 pt-3">
-            <input asp-for="Input.IsMain" class="form-check-input" />
-            <label asp-for="Input.IsMain" class="form-check-label"></label>
+        <div class="split-actions">
+            <a class="btn-ghost" asp-page="./Index">Cancel</a>
+            <button type="submit" class="btn-ink">Save</button>
         </div>
+    </div>
+    <input type="hidden" asp-for="Input.Id" />
 
-        <div class="col-md-3 form-check mt-4 pt-3">
-            <input asp-for="Input.IsEnabled" class="form-check-input" />
-            <label asp-for="Input.IsEnabled" class="form-check-label"></label>
+    <section class="section">
+        <p class="eyebrow">Identity</p>
+        <div class="grid-2">
+            <div class="field">
+                <label class="line-label" asp-for="Input.Name"></label>
+                <input asp-for="Input.Name" class="line" />
+                <span asp-validation-for="Input.Name" class="field-validation-error"></span>
+            </div>
+            <div>
+                <label class="check">
+                    <input asp-for="Input.IsMain" />
+                    <span>Nominate as Main</span>
+                </label>
+                <label class="check">
+                    <input asp-for="Input.IsEnabled" />
+                    <span>Enabled</span>
+                </label>
+            </div>
         </div>
+    </section>
 
-        <div class="col-md-6">
-            <label asp-for="Input.Server" class="form-label"></label>
-            <input asp-for="Input.Server" class="form-control" placeholder="IP or hostname" />
-            <span asp-validation-for="Input.Server" class="text-danger"></span>
+    <section class="section">
+        <p class="eyebrow">Endpoint</p>
+        <div class="grid-2">
+            <div class="field">
+                <label class="line-label" asp-for="Input.Server"></label>
+                <input asp-for="Input.Server" class="line" placeholder="Hostname" />
+                <span asp-validation-for="Input.Server" class="field-validation-error"></span>
+            </div>
+            <div class="field">
+                <label class="line-label" asp-for="Input.Database"></label>
+                <input asp-for="Input.Database" class="line" />
+                <span asp-validation-for="Input.Database" class="field-validation-error"></span>
+            </div>
         </div>
+        <div class="field" style="max-width:12rem">
+            <label class="line-label" asp-for="Input.ConnectionTimeoutSeconds"></label>
+            <input asp-for="Input.ConnectionTimeoutSeconds" class="line" />
+        </div>
+    </section>
 
-        <div class="col-md-6">
-            <label asp-for="Input.Database" class="form-label"></label>
-            <input asp-for="Input.Database" class="form-control" />
-            <span asp-validation-for="Input.Database" class="text-danger"></span>
+    <section class="section">
+        <p class="eyebrow">Authentication</p>
+        <label class="check">
+            <input asp-for="Input.IntegratedSecurity" />
+            <span>Windows authentication</span>
+        </label>
+        <div class="grid-2">
+            <div class="field">
+                <label class="line-label" asp-for="Input.UserId"></label>
+                <input asp-for="Input.UserId" class="line" />
+            </div>
+            <div class="field">
+                <label class="line-label" asp-for="Input.Password"></label>
+                <input asp-for="Input.Password" class="line" autocomplete="new-password" />
+                <p class="hint">Leave blank when editing to keep the existing password.</p>
+            </div>
         </div>
-
-        <div class="col-md-12 form-check">
-            <input asp-for="Input.IntegratedSecurity" class="form-check-input" />
-            <label asp-for="Input.IntegratedSecurity" class="form-check-label"></label>
-        </div>
-
-        <div class="col-md-4">
-            <label asp-for="Input.UserId" class="form-label"></label>
-            <input asp-for="Input.UserId" class="form-control" />
-        </div>
-
-        <div class="col-md-4">
-            <label asp-for="Input.Password" class="form-label"></label>
-            <input asp-for="Input.Password" class="form-control" autocomplete="new-password" />
-            <div class="form-hint">Leave blank when editing to keep the existing password.</div>
-        </div>
-
-        <div class="col-md-4">
-            <label asp-for="Input.ConnectionTimeoutSeconds" class="form-label"></label>
-            <input asp-for="Input.ConnectionTimeoutSeconds" class="form-control" />
-        </div>
-
-        <div class="col-md-3 form-check">
-            <input asp-for="Input.Encrypt" class="form-check-input" />
-            <label asp-for="Input.Encrypt" class="form-check-label"></label>
-        </div>
-
-        <div class="col-md-4 form-check">
-            <input asp-for="Input.TrustServerCertificate" class="form-check-input" />
-            <label asp-for="Input.TrustServerCertificate" class="form-check-label"></label>
-        </div>
-
-        <div class="col-12 d-flex gap-2 mt-3">
-            <button type="submit" class="btn btn-accent">Save</button>
-            <a class="btn btn-outline-secondary" asp-page="./Index">Cancel</a>
-        </div>
-    </form>
-</div>
+        <label class="check">
+            <input asp-for="Input.Encrypt" />
+            <span>Encrypt</span>
+        </label>
+        <label class="check">
+            <input asp-for="Input.TrustServerCertificate" />
+            <span>Trust server certificate</span>
+        </label>
+    </section>
+</form>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />

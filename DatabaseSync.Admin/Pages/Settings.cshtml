@@ -1,196 +1,218 @@
 @page
 @model DatabaseSync.Admin.Pages.SettingsModel
 @{
-    ViewData["Title"] = "Settings";
+    ViewData["Title"] = "Triggers";
 }
 
-<h1 class="h3 mb-1">Settings</h1>
-<div class="form-hint mb-3">Config file: <code class="path">@Model.ConfigPath</code></div>
-
-<form method="post" class="row g-3" id="settingsForm">
-    <div class="panel mb-3">
-        <h2 class="h5 mb-1">Manual sync</h2>
-        <div class="form-hint">
-            Always available from the dashboard <strong>Sync now</strong> button. It runs one differential cycle immediately.
-            It does not depend on the scheduled or interval switches.
+<form method="post" id="settingsForm">
+    <div class="form-head">
+        <div>
+            <p class="eyebrow">Triggers</p>
+            <h1>When a cycle starts</h1>
+            <p class="lede">Manual is the Sync now button on the desk. It is always armed. Auto and interval are configured here and stay quiet until you turn them on.</p>
         </div>
+        <button type="submit" class="btn-ink">Save settings</button>
     </div>
 
-    <div class="panel mb-3">
-        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-            <div>
-                <h2 class="h5 mb-1">Scheduled sync</h2>
-                <div class="form-hint">
-                    Each row fires once at that local time. Leave days unchecked for every day.
-                    A cron expression replaces the time and days. Example: <code>0 9 * * 1-5</code> is 09:00 on weekdays.
-                    The worker must be running. Occurrences more than the grace window late are missed, not replayed.
-                </div>
-            </div>
-            <div class="form-check">
-                <input asp-for="Input.ScheduledSyncEnabled" class="form-check-input" />
-                <label asp-for="Input.ScheduledSyncEnabled" class="form-check-label"></label>
-            </div>
+    @if (!Model.OneWaySyncEnabled)
+    {
+        <div class="alert alert-danger">
+            <label class="check">
+                <input asp-for="Input.RestoreOneWaySync" />
+                <span>One-way sync is off, so cycles do nothing. Turn it back on with this save.</span>
+            </label>
         </div>
+    }
+
+    <section class="plate section" id="auto">
+        <div class="plate-head">
+            <div>
+                <p class="eyebrow">02 · Auto</p>
+                <h2>Local times</h2>
+                <p class="hint">Each row fires once, in this machine's time zone. Leave the days empty for every day. A cron expression replaces the clock. Occurrences later than the grace window are missed, not replayed. The worker must be running.</p>
+            </div>
+            <label class="arm">
+                <input asp-for="Input.ScheduledSyncEnabled" />
+                <span class="arm-ui" aria-hidden="true"></span>
+                <span>Auto</span>
+            </label>
+        </div>
+
+        @if (Model.Input.Schedules.Count == 0)
+        {
+            <p class="empty">No times yet. Add the hours you want, then save.</p>
+        }
 
         @for (var i = 0; i < Model.Input.Schedules.Count; i++)
         {
             var schedule = Model.Input.Schedules[i];
-            <div class="border rounded p-3 mb-3">
+            <article class="time-row">
                 <input type="hidden" asp-for="Input.Schedules[i].Id" />
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-2 form-check">
-                        <input asp-for="Input.Schedules[i].Enabled" class="form-check-input" />
-                        <label asp-for="Input.Schedules[i].Enabled" class="form-check-label">Enabled</label>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label" asp-for="Input.Schedules[i].Time">Time (HH:mm)</label>
-                        <input asp-for="Input.Schedules[i].Time" class="form-control" placeholder="09:00" />
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" asp-for="Input.Schedules[i].Cron">Cron (optional)</label>
-                        <input asp-for="Input.Schedules[i].Cron" class="form-control" placeholder="0 9 * * 1-5" />
-                    </div>
-                    <div class="col-md-2 form-check">
-                        <input asp-for="Input.Schedules[i].Remove" class="form-check-input" />
-                        <label asp-for="Input.Schedules[i].Remove" class="form-check-label">Remove</label>
-                    </div>
-                </div>
-                <div class="mt-2">
-                    @foreach (var day in SettingsModel.WeekDays)
-                    {
-                        var selected = (schedule.DaysOfWeek ?? []).Contains(day, StringComparer.OrdinalIgnoreCase);
-                        <label class="form-check form-check-inline">
-                            @if (selected)
-                            {
-                                <input class="form-check-input" type="checkbox" name="Input.Schedules[@i].DaysOfWeek" value="@day" checked />
-                            }
-                            else
-                            {
-                                <input class="form-check-input" type="checkbox" name="Input.Schedules[@i].DaysOfWeek" value="@day" />
-                            }
-                            <span class="form-check-label">@day[..3]</span>
+                <header>
+                    <span class="time-index">@((i + 1).ToString("00"))</span>
+                    <label class="arm">
+                        <input asp-for="Input.Schedules[i].Enabled" />
+                        <span class="arm-ui" aria-hidden="true"></span>
+                        <span class="hint">On</span>
+                    </label>
+                    <div class="segment" role="radiogroup" aria-label="How this time is specified">
+                        <label>
+                            <input class="mode-clock" type="radio" name="Input.Schedules[@i].UseCron" value="false" checked="@(!schedule.UseCron)" />
+                            <span>Clock</span>
                         </label>
-                    }
+                        <label>
+                            <input class="mode-cron" type="radio" name="Input.Schedules[@i].UseCron" value="true" checked="@schedule.UseCron" />
+                            <span>Cron</span>
+                        </label>
+                    </div>
+                    <button type="submit" class="text-btn danger" asp-page-handler="RemoveSchedule" asp-route-index="@i">Remove</button>
+                </header>
+                <div class="clock-fields">
+                    <div class="clock-line">
+                        <div>
+                            <label class="line-label" asp-for="Input.Schedules[i].Time">Time</label>
+                            <input asp-for="Input.Schedules[i].Time" class="line" placeholder="09:00" />
+                        </div>
+                        <div class="days">
+                            @foreach (var day in SettingsModel.WeekDays)
+                            {
+                                var selected = (schedule.DaysOfWeek ?? []).Contains(day, StringComparer.OrdinalIgnoreCase);
+                                <label class="day">
+                                    <input type="checkbox" name="Input.Schedules[@i].DaysOfWeek" value="@day" checked="@selected" />
+                                    <span>@day.Substring(0, 3)</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                    <span asp-validation-for="Input.Schedules[i].Time" class="field-validation-error"></span>
                 </div>
-                <span asp-validation-for="Input.Schedules[i].Time" class="text-danger"></span>
-                <span asp-validation-for="Input.Schedules[i].Cron" class="text-danger"></span>
-            </div>
+                <div class="cron-fields">
+                    <label class="line-label" asp-for="Input.Schedules[i].Cron">Cron</label>
+                    <input asp-for="Input.Schedules[i].Cron" class="line" placeholder="0 9 * * 1-5" />
+                    <p class="hint">Five fields, local time. <span class="mono">0 9 * * 1-5</span> is 09:00 on weekdays. Cron replaces the clock and the days.</p>
+                    <span asp-validation-for="Input.Schedules[i].Cron" class="field-validation-error"></span>
+                </div>
+            </article>
         }
 
-        <button type="submit" asp-page-handler="AddSchedule" class="btn btn-outline-secondary">Add schedule</button>
-    </div>
+        <div class="split-actions" style="margin-top:0.8rem">
+            <button type="submit" class="btn-ghost" asp-page-handler="AddSchedule">Add time</button>
+        </div>
+    </section>
 
-    <div class="panel mb-3">
-        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+    <section class="plate section interval-plate" id="interval">
+        <div class="plate-head">
             <div>
-                <h2 class="h5 mb-1">Interval sync</h2>
-                <div class="form-hint">
-                    Off by default. Each cycle hashes every syncable table, so a short interval is expensive.
-                    Missed ticks are not caught up. The worker must be running.
-                </div>
+                <p class="eyebrow">03 · Interval</p>
+                <h2>Every so often</h2>
+                <p class="hint">Off unless you arm it. Each cycle hashes every syncable table, so a short interval is expensive. Missed ticks are not caught up. The worker must be running.</p>
             </div>
-            <div class="form-check">
-                <input asp-for="Input.IntervalSyncEnabled" class="form-check-input" />
-                <label asp-for="Input.IntervalSyncEnabled" class="form-check-label"></label>
+            <div>
+                <span class="stamp">Off by default</span>
+                <label class="arm">
+                    <input asp-for="Input.IntervalSyncEnabled" />
+                    <span class="arm-ui" aria-hidden="true"></span>
+                    <span>Arm</span>
+                </label>
             </div>
         </div>
-        <div class="row g-3">
-            <div class="col-md-3">
-                <label asp-for="Input.IntervalValue" class="form-label"></label>
-                <input asp-for="Input.IntervalValue" class="form-control" />
-                <span asp-validation-for="Input.IntervalValue" class="text-danger"></span>
+        <div class="pair">
+            <div>
+                <label class="line-label" asp-for="Input.IntervalValue"></label>
+                <input asp-for="Input.IntervalValue" class="line" />
+                <span asp-validation-for="Input.IntervalValue" class="field-validation-error"></span>
             </div>
-            <div class="col-md-3">
-                <label asp-for="Input.IntervalUnit" class="form-label"></label>
-                <select asp-for="Input.IntervalUnit" class="form-select">
+            <div>
+                <label class="line-label" asp-for="Input.IntervalUnit"></label>
+                <select asp-for="Input.IntervalUnit" class="line">
                     <option>Minutes</option>
                     <option>Hours</option>
                     <option>Days</option>
                 </select>
+                <span asp-validation-for="Input.IntervalUnit" class="field-validation-error"></span>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div class="panel mb-3">
-        <h2 class="h5 mb-1">Differential sync and conflicts</h2>
-        <div class="form-hint mb-3">
-            Main always wins. A target row is a conflict only when it is strictly newer than main
-            (or, for a delete, newer than every change timestamp still on main).
-            Tables with no datetime change column are not treated as conflicts unless the backup-all option is on.
-            rowversion is ignored. A small conflict set is a JSON review file; a larger one is a JSONL export,
-            or a <code>sync.ConflictBackup_*</code> table when that option is on. Every conflict is appended to
-            <code>conflict-log.jsonl</code> with review status Pending.
+    <section class="section" id="conflicts">
+        <p class="eyebrow">After a conflict</p>
+        <h2>What gets kept</h2>
+        <p class="lede">Main always wins. A target row is flagged only when it is strictly newer. The row is backed up, then main is applied. Review the copies on the <a asp-page="/Conflicts">Conflicts</a> page.</p>
+        <label class="option">
+            <input asp-for="Input.DryRun" />
+            <span>
+                <strong>Dry run</strong>
+                <small>Compute the diff and write review files. Do not change target data.</small>
+            </span>
+        </label>
+        <label class="option">
+            <input asp-for="Input.AssumeDifferingRowsConflict" />
+            <span>
+                <strong>Back up every differing target row</strong>
+                <small>Even when the table has no change-timestamp column, or the target is not newer. Off, because it can be large.</small>
+            </span>
+        </label>
+        <label class="option">
+            <input asp-for="Input.UseConflictBackupTables" />
+            <span>
+                <strong>Large conflicts go to a backup table</strong>
+                <small>Off. Creates <span class="mono">sync.ConflictBackup_*</span> on the target. Otherwise a large set is a JSONL file.</small>
+            </span>
+        </label>
+        <label class="option">
+            <input asp-for="Input.WriteConflictLogTable" />
+            <span>
+                <strong>Also write sync.ConflictLog on the target</strong>
+                <small>Off. The JSONL log is always written and is what this desk reads.</small>
+            </span>
+        </label>
+        <div class="grid-3" style="margin-top:0.9rem">
+            <div>
+                <label class="line-label" asp-for="Input.ConflictBackupFolder"></label>
+                <input asp-for="Input.ConflictBackupFolder" class="line" />
+                <span asp-validation-for="Input.ConflictBackupFolder" class="field-validation-error"></span>
+            </div>
+            <div>
+                <label class="line-label" asp-for="Input.ConflictFileRowThreshold"></label>
+                <input asp-for="Input.ConflictFileRowThreshold" class="line" />
+            </div>
+            <div>
+                <label class="line-label" asp-for="Input.ConflictFileMaxMegabytes"></label>
+                <input asp-for="Input.ConflictFileMaxMegabytes" class="line" />
+            </div>
         </div>
-        <div class="row g-3">
-            <div class="col-md-4 form-check">
-                <input asp-for="Input.DryRun" class="form-check-input" />
-                <label asp-for="Input.DryRun" class="form-check-label"></label>
-                <div class="form-hint">Compute the diff and write review files. Do not change target data.</div>
-            </div>
-            <div class="col-md-4 form-check">
-                <input asp-for="Input.AssumeDifferingRowsConflict" class="form-check-input" />
-                <label asp-for="Input.AssumeDifferingRowsConflict" class="form-check-label"></label>
-            </div>
-            <div class="col-md-4 form-check">
-                <input asp-for="Input.UseConflictBackupTables" class="form-check-input" />
-                <label asp-for="Input.UseConflictBackupTables" class="form-check-label"></label>
-                <div class="form-hint">Off by default. Creates tables in the sync schema on the target.</div>
-            </div>
-            <div class="col-md-4 form-check">
-                <input asp-for="Input.WriteConflictLogTable" class="form-check-input" />
-                <label asp-for="Input.WriteConflictLogTable" class="form-check-label"></label>
-                <div class="form-hint">Off by default. The JSONL log is always written.</div>
-            </div>
-            <div class="col-md-4">
-                <label asp-for="Input.ConflictBackupFolder" class="form-label"></label>
-                <input asp-for="Input.ConflictBackupFolder" class="form-control" />
-            </div>
-            <div class="col-md-2">
-                <label asp-for="Input.ConflictFileRowThreshold" class="form-label"></label>
-                <input asp-for="Input.ConflictFileRowThreshold" class="form-control" />
-            </div>
-            <div class="col-md-2">
-                <label asp-for="Input.ConflictFileMaxMegabytes" class="form-label"></label>
-                <input asp-for="Input.ConflictFileMaxMegabytes" class="form-control" />
-            </div>
-            <div class="col-12">
-                <label asp-for="Input.ChangeTimestampColumnNames" class="form-label"></label>
-                <textarea asp-for="Input.ChangeTimestampColumnNames" class="form-control" rows="2" placeholder="Leave empty to use ModifiedAt, UpdatedAt, LastModified, ..."></textarea>
-                <div class="form-hint">First matching datetime column wins. Empty uses the built-in name list.</div>
-            </div>
+        <div class="field" style="margin-top:0.8rem">
+            <label class="line-label" asp-for="Input.ChangeTimestampColumnNames"></label>
+            <textarea asp-for="Input.ChangeTimestampColumnNames" class="area" rows="2" placeholder="Leave empty to use ModifiedAt, UpdatedAt, LastModified, ..."></textarea>
+            <p class="hint">First matching datetime column wins. Empty uses the built-in name list. rowversion is ignored.</p>
         </div>
-    </div>
+    </section>
 
-    <div class="panel mb-3">
-        <h2 class="h5 mb-3">Other options</h2>
-        <div class="row g-3">
-            <div class="col-md-4 form-check">
-                <input asp-for="Input.SyncMainToOthers" class="form-check-input" />
-                <label asp-for="Input.SyncMainToOthers" class="form-check-label"></label>
+    <section class="section" id="engine">
+        <p class="eyebrow">Engine</p>
+        <h2>Retries and logging</h2>
+        <label class="option">
+            <input asp-for="Input.EnableDetailedLogging" />
+            <span>
+                <strong>Detailed logging</strong>
+                <small>Write extra diagnostic lines for each cycle.</small>
+            </span>
+        </label>
+        <div class="grid-3" style="margin-top:0.9rem">
+            <div>
+                <label class="line-label" asp-for="Input.RetryIntervalSeconds"></label>
+                <input asp-for="Input.RetryIntervalSeconds" class="line" />
             </div>
-            <div class="col-md-4 form-check">
-                <input asp-for="Input.EnableDetailedLogging" class="form-check-input" />
-                <label asp-for="Input.EnableDetailedLogging" class="form-check-label"></label>
+            <div>
+                <label class="line-label" asp-for="Input.MaximumRetryAttempts"></label>
+                <input asp-for="Input.MaximumRetryAttempts" class="line" />
             </div>
-            <div class="col-md-4"></div>
-            <div class="col-md-4">
-                <label asp-for="Input.RetryIntervalSeconds" class="form-label"></label>
-                <input asp-for="Input.RetryIntervalSeconds" class="form-control" />
-            </div>
-            <div class="col-md-4">
-                <label asp-for="Input.MaximumRetryAttempts" class="form-label"></label>
-                <input asp-for="Input.MaximumRetryAttempts" class="form-control" />
-            </div>
-            <div class="col-md-4">
-                <label asp-for="Input.CommandTimeoutSeconds" class="form-label"></label>
-                <input asp-for="Input.CommandTimeoutSeconds" class="form-control" />
+            <div>
+                <label class="line-label" asp-for="Input.CommandTimeoutSeconds"></label>
+                <input asp-for="Input.CommandTimeoutSeconds" class="line" />
             </div>
         </div>
-    </div>
-
-    <div class="col-12">
-        <button type="submit" class="btn btn-accent">Save settings</button>
-    </div>
+    </section>
 </form>
 
 @section Scripts {

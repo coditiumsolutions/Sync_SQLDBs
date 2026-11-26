@@ -77,4 +77,26 @@ public class IndexModel : PageModel
                 : $"Failed {result.ConnectionName}: {result.ErrorMessage}";
         return RedirectToPage();
     }
+
+    public async Task<IActionResult> OnPostTestAllAsync()
+    {
+        var config = await _configStore.GetAsync();
+        var ok = 0;
+        var fail = 0;
+        foreach (var connection in config.Connections.Where(c => c.IsEnabled))
+        {
+            var result = await _connectionService.TestConnectionAsync(connection.Id);
+            if (result.IsSuccessful)
+            {
+                ok++;
+            }
+            else
+            {
+                fail++;
+            }
+        }
+
+        TempData["StatusMessage"] = $"Connectivity test finished. OK={ok}, Failed={fail}.";
+        return RedirectToPage();
+    }
 }
