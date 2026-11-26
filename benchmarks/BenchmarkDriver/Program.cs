@@ -85,7 +85,7 @@ try
 
         foreach (var scenario in new[] { "initial", "steady", "delta-1pct", "delta-10pct", "conflicts" }.Where(options.Scenarios.Contains))
         {
-            foreach (var engine in new[] { "old", "new" })
+            foreach (var engine in new[] { "old", "new", "fallback" })
             {
                 for (var repeat = 1; repeat <= options.Repeats; repeat++)
                 {
@@ -95,7 +95,7 @@ try
                     await SeedAsync(source, size.Customers, size.Orders, size.Lines);
                     if (scenario != "initial")
                     {
-                        var prep = await RunHostAsync(newDll, source, target, secret, Path.Combine(Path.GetTempPath(), "bench-conflicts-prep"));
+                        var prep = await RunHostAsync(newDll, source, target, secret, Path.Combine(Path.GetTempPath(), "bench-conflicts-prep"), bulkFallback: true);
                         if (!prep.Success)
                         {
                             throw new InvalidOperationException("Prep sync failed: " + prep.Error);
@@ -126,14 +126,14 @@ try
                     var beforeSource = await SqlCountersAsync(source);
                     var beforeTarget = await SqlCountersAsync(target);
                     var dll = engine == "old" ? oldDll : newDll;
-                    var measured = await RunHostAsync(dll, source, target, secret, conflictDir);
+                    var measured = await RunHostAsync(dll, source, target, secret, conflictDir, bulkFallback: engine == "fallback");
                     var afterSource = await SqlCountersAsync(source);
                     var afterTarget = await SqlCountersAsync(target);
                     var match = await SignaturesMatchAsync(source, target);
                     var conflicts = CountConflicts(conflictDir);
-                    var payloadBytes = engine == "new"
-                        ? measured.EstimatedBytes
-                        : EstimateOldBytes(measured.RowsRead, widths, size);
+                    var payloadBytes = engine == "old"
+                        ? EstimateOldBytes(measured.RowsRead, widths, size)
+                        : measured.EstimatedBytes;
                     var record = new RunRecord
                     {
                         Size = size.Name,
@@ -208,10 +208,10 @@ static long EstimateOldBytes(long rowsRead, RowWidths widths, (string Name, int 
     return (long)(rowsRead * (weight / count));
 }
 
-static async Task<MeasuredRun> RunHostAsync(string dll, SecretEndpoint source, SecretEndpoint target, SecretConfig secret, string conflictDir)
+static async Task<MeasuredRun> RunHostAsync(string dll, SecretEndpoint source, SecretEndpoint target, SecretConfig secret, string conflictDir, bool bulkFallback)
 {
     var runConfig = Path.Combine(Path.GetTempPath(), "bench-sync-run.json");
-    secret.WriteRunFile(runConfig, source, target, conflictDir);
+    secret.WriteRunFile(runConfig, source, target, conflictDir, bulkFallback);
     var psi = new ProcessStartInfo
     {
         FileName = "dotnet",
@@ -561,7 +561,7 @@ static async Task<SqlCounters> SqlCountersAsync(SecretEndpoint endpoint)
         """;
     await using var connection = Open(endpoint);
     await connection.OpenAsync();
-    await using var command = new SqlCommand(sql, connection) { CommandTimeout = 60 };
+    await using var command = new SqlCommand(sql, connection) { CommandTimeout = 0 };
     await using var reader = await command.ExecuteReaderAsync();
     await reader.ReadAsync();
     return new SqlCounters(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2));
@@ -747,6 +747,8 @@ static async Task WriteReportAsync(string resultsDir, List<RunRecord> runs, bool
     report.AppendLine();
     report.AppendLine("No-op is faster and ships almost nothing. A 1% or 10% change ships fewer bytes than the full copy and still loses a few seconds, because each of the three tables still pays several round trips at about 170 ms. Conflicts are flagged (20 newer customers and 1,000 newer lines, including deletes) and main still wins. One million rows were not run.");
     report.AppendLine();
+    report.AppendLine("Bulk fallback is on for the `fallback` engine and off for `new`. It switches to one bulk copy when dirty ranges cover 15,000 rows, or at least 8,000 rows and 20% of the table. A matching checksum stays on the differential path. The optional small-table rule is off because a full copy of the 10k tables was slower than the per-key path. One million rows were not run.");
+    report.AppendLine();
     report.AppendLine("## This run");
     report.AppendLine();
     if (runs.Count == 0)
@@ -761,7 +763,7 @@ static async Task WriteReportAsync(string resultsDir, List<RunRecord> runs, bool
         {
             foreach (var scenario in runs.Where(run => run.Size == size).Select(run => run.Scenario).Distinct())
             {
-                foreach (var engine in new[] { "old", "new" })
+                foreach (var engine in new[] { "old", "new", "fallback" })
                 {
                     var group = runs.Where(run => run.Size == size && run.Scenario == scenario && run.Engine == engine).ToList();
                     if (group.Count == 0) continue;
@@ -802,10 +804,18 @@ static async Task WriteReportAsync(string resultsDir, List<RunRecord> runs, bool
         {
             var oldMs = runs.Where(run => run.Scenario == scenario && run.Engine == "old").Select(run => (double)run.EngineElapsedMs).ToList();
             var newMs = runs.Where(run => run.Scenario == scenario && run.Engine == "new").Select(run => (double)run.EngineElapsedMs).ToList();
+            var fallbackMs = runs.Where(run => run.Scenario == scenario && run.Engine == "fallback").Select(run => (double)run.EngineElapsedMs).ToList();
             var oldBytes = runs.Where(run => run.Scenario == scenario && run.Engine == "old").Select(run => (double)run.PayloadBytes).ToList();
             var newBytes = runs.Where(run => run.Scenario == scenario && run.Engine == "new").Select(run => (double)run.PayloadBytes).ToList();
+            var fallbackBytes = runs.Where(run => run.Scenario == scenario && run.Engine == "fallback").Select(run => (double)run.PayloadBytes).ToList();
             if (oldMs.Count == 0 || newMs.Count == 0) continue;
-            report.AppendLine($"- {scenario}: old median {Median(oldMs):0} ms / {FormatBytes(Median(oldBytes))}, new median {Median(newMs):0} ms / {FormatBytes(Median(newBytes))}.");
+            var line = $"- {scenario}: old median {Median(oldMs):0} ms / {FormatBytes(Median(oldBytes))}, new median {Median(newMs):0} ms / {FormatBytes(Median(newBytes))}";
+            if (fallbackMs.Count > 0)
+            {
+                line += $", fallback median {Median(fallbackMs):0} ms / {FormatBytes(Median(fallbackBytes))}";
+            }
+
+            report.AppendLine(line + ".");
         }
     }
 
@@ -896,7 +906,7 @@ sealed class SecretConfig
         return config;
     }
 
-    public void WriteRunFile(string path, SecretEndpoint source, SecretEndpoint targetEndpoint, string conflictDir)
+    public void WriteRunFile(string path, SecretEndpoint source, SecretEndpoint targetEndpoint, string conflictDir, bool bulkFallback)
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -918,7 +928,12 @@ sealed class SecretConfig
                 ["ConflictBackupFolder"] = conflictDir,
                 ["ChangeTimestampColumnNames"] = new[] { "UpdatedAt" },
                 ["FingerprintBatchSize"] = 10000,
-                ["DiffApplyBatchSize"] = 4000
+                ["DiffApplyBatchSize"] = 4000,
+                ["BulkFallbackEnabled"] = bulkFallback,
+                ["BulkFallbackSmallTableRows"] = 0,
+                ["BulkFallbackMismatchedRows"] = 15000,
+                ["BulkFallbackChangedFraction"] = 0.2,
+                ["BulkFallbackFractionMinRows"] = 8000
             },
             Connections = new[]
             {
