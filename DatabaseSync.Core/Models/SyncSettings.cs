@@ -90,6 +90,24 @@ public sealed class SyncSettings
     public int DiffApplyBatchSize { get; set; } = 4000;
 
     /// <summary>
+    /// When true, a table whose dirty ranges are large, or which is small and not identical, is applied
+    /// with one bulk copy and a set-based merge instead of per-key fetches. Off keeps the per-key path.
+    /// </summary>
+    public bool BulkFallbackEnabled { get; set; } = true;
+
+    /// <summary>Source row count at or below which any difference uses the bulk path. 0 disables this rule.</summary>
+    public int BulkFallbackSmallTableRows { get; set; } = DatabaseSync.Core.Diff.BulkFallbackPolicy.DefaultSmallTableRows;
+
+    /// <summary>Dirty-range row count that switches a larger table onto the bulk path. 0 disables this rule.</summary>
+    public int BulkFallbackMismatchedRows { get; set; } = DatabaseSync.Core.Diff.BulkFallbackPolicy.DefaultMismatchedRows;
+
+    /// <summary>Dirty-range share of the source table that also switches to the bulk path. 0 disables this rule.</summary>
+    public double BulkFallbackChangedFraction { get; set; } = DatabaseSync.Core.Diff.BulkFallbackPolicy.DefaultChangedFraction;
+
+    /// <summary>The fraction rule also requires at least this many dirty-range rows, so a small table is not bulk-copied.</summary>
+    public int BulkFallbackFractionMinRows { get; set; } = DatabaseSync.Core.Diff.BulkFallbackPolicy.DefaultFractionMinRows;
+
+    /// <summary>
     /// Conflict count at or below this (and <see cref="ConflictFileMaxBytes"/>) is written as one JSON review file.
     /// Above either ceiling the set is a JSONL bulk file, or a backup table when that option is on.
     /// </summary>

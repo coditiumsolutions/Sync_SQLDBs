@@ -13,9 +13,11 @@ dotnet build "${ROOT}/benchmarks/NewSyncHost/NewSyncHost.csproj" -c Release
 OLD="${ROOT}/benchmarks/.build/old-src"
 rm -rf "${OLD}"
 mkdir -p "${OLD}"
-git -C "${ROOT}" archive main | tar -x -C "${OLD}"
+# Whole-table copy, the mainline parent of the differential merge.
+OLD_REV=982e65b22f85fecfe94b51dbbc885a28688b3ef8
+git -C "${ROOT}" archive "${OLD_REV}" | tar -x -C "${OLD}"
 rm -rf "${OLD}/OldSyncHost"
 cp -a "${ROOT}/benchmarks/old-host" "${OLD}/OldSyncHost"
-echo "Building old sync host from $(git -C "${ROOT}" rev-parse main)"
+echo "Building old sync host from ${OLD_REV}"
 dotnet build "${OLD}/OldSyncHost/OldSyncHost.csproj" -c Release
 echo "Hosts ready"

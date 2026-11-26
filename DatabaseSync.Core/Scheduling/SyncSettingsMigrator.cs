@@ -47,6 +47,17 @@ public static class SyncSettingsMigrator
         settings.ConflictFileMaxBytes = Math.Max(1024, settings.ConflictFileMaxBytes);
         settings.FingerprintBatchSize = Math.Max(100, settings.FingerprintBatchSize);
         settings.DiffApplyBatchSize = Math.Max(1, settings.DiffApplyBatchSize);
+        settings.BulkFallbackSmallTableRows = Math.Max(0, settings.BulkFallbackSmallTableRows);
+        settings.BulkFallbackMismatchedRows = Math.Max(0, settings.BulkFallbackMismatchedRows);
+        settings.BulkFallbackFractionMinRows = Math.Max(0, settings.BulkFallbackFractionMinRows);
+        if (double.IsNaN(settings.BulkFallbackChangedFraction) || settings.BulkFallbackChangedFraction < 0)
+        {
+            settings.BulkFallbackChangedFraction = 0;
+        }
+        else if (settings.BulkFallbackChangedFraction > 1)
+        {
+            settings.BulkFallbackChangedFraction = 1;
+        }
 
         if (string.IsNullOrWhiteSpace(settings.ConflictBackupFolder))
         {

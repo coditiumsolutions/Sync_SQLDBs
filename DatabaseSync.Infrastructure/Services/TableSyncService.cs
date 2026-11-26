@@ -159,10 +159,14 @@ public sealed class TableSyncService : ITableSyncService
             List<DiffKey> diffs;
             long fingerprintRows;
             long bytes;
+            var bulkFallback = false;
+            var bulkReason = "differential";
             if (fullHash && IsSingleIntegerKey(table))
             {
                 var ranged = await CollectIntegerRangeDiffsAsync(
-                    sourceConnection, targetConnection, table, timeout, settings.FingerprintBatchSize, cancellationToken).ConfigureAwait(false);
+                    sourceConnection, targetConnection, table, timeout, settings, cancellationToken).ConfigureAwait(false);
+                bulkFallback = ranged.BulkFallback;
+                bulkReason = ranged.BulkReason;
                 diffs = ranged.Diffs;
                 fingerprintRows = ranged.SourceRows;
                 bytes = ranged.Bytes;
@@ -176,6 +180,27 @@ public sealed class TableSyncService : ITableSyncService
                 diffs = hashed.Diffs;
                 fingerprintRows = hashed.SourceRows;
                 bytes = hashed.Bytes;
+                if (fullHash && includeDeletes)
+                {
+                    var decision = BulkFallbackPolicy.Decide(
+                        settings.BulkFallbackEnabled,
+                        sourceRows,
+                        diffs.Count,
+                        settings.BulkFallbackSmallTableRows,
+                        settings.BulkFallbackMismatchedRows,
+                        settings.BulkFallbackChangedFraction,
+                        settings.BulkFallbackFractionMinRows);
+                    bulkFallback = decision.UseBulkPath;
+                    bulkReason = decision.Reason;
+                }
+            }
+
+            if (bulkFallback)
+            {
+                return await ApplyBulkFallbackAsync(
+                    sourceConnection, targetConnection, table, target, copyable, settings, request, dryRun,
+                    changeColumn, sourceConnectionId, targetConnectionId, rowVersion, fullHash, bulkReason,
+                    stopwatch, timeout, cancellationToken).ConfigureAwait(false);
             }
 
             var inserted = diffs.Count(row => row.Kind == DiffKind.Insert);
@@ -285,6 +310,294 @@ public sealed class TableSyncService : ITableSyncService
             _logger.LogError(ex, "Failed differential sync of {Table} to {Target}.", table.FullName, target.Name);
             return Result(table, target, stopwatch, dryRun, false, false, error: ex.Message, changeColumn: changeColumn?.Name);
         }
+    }
+
+    private async Task<TableSyncResult> ApplyBulkFallbackAsync(
+        SqlConnection sourceConnection,
+        SqlConnection targetConnection,
+        TableSchema table,
+        SyncConnection target,
+        IReadOnlyList<ColumnSchema> copyable,
+        SyncSettings settings,
+        SyncTableRequest request,
+        bool dryRun,
+        ColumnSchema? changeColumn,
+        string sourceConnectionId,
+        string targetConnectionId,
+        ColumnSchema? rowVersion,
+        bool fullHash,
+        string reason,
+        Stopwatch stopwatch,
+        int timeout,
+        CancellationToken cancellationToken)
+    {
+        var rowBytes = ColumnSizeEstimator.EstimateRowBytes(copyable);
+        long rows = 0;
+        long inserted = 0;
+        long updated = 0;
+        long deleted = 0;
+        long bytes = 0;
+        string? backupLocation = null;
+        var conflicted = 0;
+
+        var backupSettings = new ConflictBackupSettings
+        {
+            FileRowThreshold = settings.ConflictFileRowThreshold,
+            FileMaxBytes = settings.ConflictFileMaxBytes,
+            UseBackupTables = settings.UseConflictBackupTables && !dryRun
+        };
+        IConflictTableWriter? tableWriter = backupSettings.UseBackupTables
+            ? new BackupTableWriter(targetConnection, table, copyable, timeout, request.CycleId)
+            : null;
+        IConflictLogTable? logTable = settings.WriteConflictLogTable && !dryRun
+            ? new ConflictLogTableWriter(targetConnection, table, target.Name, request.CycleId, timeout)
+            : null;
+
+        await using var backups = ConflictBackupSession.Create(
+            backupSettings,
+            _logger,
+            request.BackupFolder,
+            $"{table.SchemaName}.{table.TableName}",
+            target.Name,
+            request.CycleId,
+            request.Trigger.ToString(),
+            dryRun,
+            tableWriter,
+            logTable);
+
+        try
+        {
+            if (!dryRun || changeColumn is not null || settings.AssumeDifferingRowsConflict)
+            {
+                await ExecuteAsync(targetConnection, $"""
+                    IF OBJECT_ID('tempdb..#SyncStaging') IS NOT NULL DROP TABLE #SyncStaging;
+                    SELECT TOP (0) * INTO #SyncStaging FROM {table.FullName};
+                    """, timeout, cancellationToken).ConfigureAwait(false);
+                var selectSql = $"SELECT {ColumnList(copyable)} FROM {table.FullName};";
+                rows = await BulkCopyQueryAsync(
+                    sourceConnection, targetConnection, selectSql, "#SyncStaging", copyable, timeout, settings.FingerprintBatchSize, transaction: null, cancellationToken)
+                    .ConfigureAwait(false);
+                bytes = rows * rowBytes;
+                (inserted, updated, deleted) = await CountBulkChangesAsync(targetConnection, table, timeout, cancellationToken).ConfigureAwait(false);
+                await ReadBulkConflictsAsync(
+                    targetConnection, table, copyable, changeColumn, settings.AssumeDifferingRowsConflict, backups, timeout, cancellationToken)
+                    .ConfigureAwait(false);
+                await backups.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!dryRun)
+            {
+                var identityOn = false;
+                try
+                {
+                    if (table.HasIdentity)
+                    {
+                        await ExecuteAsync(targetConnection, $"SET IDENTITY_INSERT {table.FullName} ON;", timeout, cancellationToken)
+                            .ConfigureAwait(false);
+                        identityOn = true;
+                    }
+
+                    await ExecuteAsync(targetConnection, BuildMergeSql(table, copyable), timeout, cancellationToken).ConfigureAwait(false);
+                    await ExecuteAsync(targetConnection, $"""
+                        DELETE tgt
+                        FROM {table.FullName} AS tgt
+                        LEFT JOIN #SyncStaging AS source ON {Join("tgt", "source", table)}
+                        WHERE source.{Q(table.PrimaryKeyColumns[0].Name)} IS NULL;
+                        """, timeout, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (identityOn)
+                    {
+                        await ExecuteAsync(targetConnection, $"SET IDENTITY_INSERT {table.FullName} OFF;", timeout, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            await backups.CompleteAsync(cancellationToken).ConfigureAwait(false);
+            backupLocation = backups.Location;
+            conflicted = backups.Count;
+        }
+
+        stopwatch.Stop();
+        _logger.LogInformation(
+            "Bulk fallback sync {Table} => {Target}. Reason={Reason} Trigger={Trigger} DryRun={DryRun} Inserted={Inserted} Updated={Updated} Deleted={Deleted} Conflicted={Conflicted} EstimatedBytes={EstimatedBytes} ElapsedMs={ElapsedMs}",
+            table.FullName, target.Name, reason, request.Trigger, dryRun, inserted, updated, deleted, conflicted, bytes, stopwatch.ElapsedMilliseconds);
+
+        var unchanged = Math.Max(0, rows - inserted - updated);
+        var applied = Result(table, target, stopwatch, dryRun, true, false, rows, inserted + updated + deleted,
+            inserted, updated, deleted, conflicted, unchanged, rows, bytes, backupLocation, changeColumn?.Name);
+        await RememberWatermarkAsync(sourceConnection, sourceConnectionId, targetConnectionId, table, changeColumn, rowVersion, request, applied.Success, fullHash, timeout, cancellationToken)
+            .ConfigureAwait(false);
+        return applied;
+    }
+
+    private static async Task<(long Inserted, long Updated, long Deleted)> CountBulkChangesAsync(
+        SqlConnection targetConnection,
+        TableSchema table,
+        int timeout,
+        CancellationToken cancellationToken)
+    {
+        var first = Q(table.PrimaryKeyColumns[0].Name);
+        var join = Join("s", "t", table);
+        var targetJoin = Join("t", "s", table);
+        await using var command = targetConnection.CreateCommand();
+        command.CommandTimeout = timeout;
+        command.CommandText = $"""
+            SELECT
+                (SELECT COUNT_BIG(*) FROM #SyncStaging AS s LEFT JOIN {table.FullName} AS t ON {join} WHERE t.{first} IS NULL),
+                (SELECT COUNT_BIG(*) FROM #SyncStaging AS s INNER JOIN {table.FullName} AS t ON {join}),
+                (SELECT COUNT_BIG(*) FROM {table.FullName} AS t LEFT JOIN #SyncStaging AS s ON {targetJoin} WHERE s.{first} IS NULL);
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        return (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2));
+    }
+
+    private static async Task ReadBulkConflictsAsync(
+        SqlConnection targetConnection,
+        TableSchema table,
+        IReadOnlyList<ColumnSchema> copyable,
+        ColumnSchema? changeColumn,
+        bool assumeDifferingRowsConflict,
+        ConflictBackupSession backups,
+        int timeout,
+        CancellationToken cancellationToken)
+    {
+        if (changeColumn is null && !assumeDifferingRowsConflict)
+        {
+            return;
+        }
+
+        var keyNames = table.PrimaryKeyColumns.Select(column => column.Name).ToArray();
+        var targetList = string.Join(", ", copyable.Select(column => $"t.{Q(column.Name)} AS {Q("t_" + column.Name)}"));
+        var sourceList = string.Join(", ", copyable.Select(column => $"s.{Q(column.Name)} AS {Q("s_" + column.Name)}"));
+        var join = Join("t", "s", table);
+        var first = Q(table.PrimaryKeyColumns[0].Name);
+
+        if (changeColumn is not null || assumeDifferingRowsConflict)
+        {
+            var updateWhere = assumeDifferingRowsConflict || changeColumn is null
+                ? $"({RowHashSqlBuilder.BuildCheapRowTokenExpression(table, "t")}) <> ({RowHashSqlBuilder.BuildCheapRowTokenExpression(table, "s")})"
+                : BulkFallbackConflict.UpdateIsNewer("t", "s", Q(changeColumn.Name));
+            if (changeColumn is not null && assumeDifferingRowsConflict)
+            {
+                updateWhere = $"({updateWhere}) OR {BulkFallbackConflict.UpdateIsNewer("t", "s", Q(changeColumn.Name))}";
+            }
+
+            await using var update = targetConnection.CreateCommand();
+            update.CommandTimeout = timeout;
+            update.CommandText = $"""
+                SELECT {targetList}, {sourceList}
+                FROM {table.FullName} AS t
+                INNER JOIN #SyncStaging AS s ON {join}
+                WHERE {updateWhere};
+                """;
+            await using var reader = await update.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var targetValues = ReadPrefixed(reader, "t_", copyable);
+                var mainValues = ReadPrefixed(reader, "s_", copyable);
+                var keys = keyNames.Select(name => targetValues.TryGetValue(name, out var value) ? value : null).ToArray();
+                await backups.AddAsync(new ConflictRow
+                {
+                    Operation = "Update",
+                    KeyNames = keyNames,
+                    KeyValues = keys,
+                    TargetValues = targetValues,
+                    MainValues = mainValues,
+                    MainChangeTimestamp = changeColumn is null ? null : TimestampValue.Read(mainValues.GetValueOrDefault(changeColumn.Name)),
+                    TargetChangeTimestamp = changeColumn is null ? null : TimestampValue.Read(targetValues.GetValueOrDefault(changeColumn.Name))
+                }, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        string? deleteWhere = null;
+        if (assumeDifferingRowsConflict)
+        {
+            deleteWhere = $"s.{first} IS NULL";
+        }
+        else if (changeColumn is not null)
+        {
+            var rawMax = await targetConnection.ExecuteScalarAsync<object?>(new CommandDefinition(
+                $"SELECT MAX({Q(changeColumn.Name)}) FROM #SyncStaging;",
+                commandTimeout: timeout,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+            deleteWhere = $"s.{first} IS NULL AND {BulkFallbackConflict.DeleteIsNewer("t", Q(changeColumn.Name), "@mainMax")}";
+            await using var delete = targetConnection.CreateCommand();
+            delete.CommandTimeout = timeout;
+            var maxParameter = delete.CreateParameter();
+            maxParameter.ParameterName = "@mainMax";
+            maxParameter.Value = rawMax ?? DBNull.Value;
+            delete.Parameters.Add(maxParameter);
+            delete.CommandText = $"""
+                SELECT {targetList}
+                FROM {table.FullName} AS t
+                LEFT JOIN #SyncStaging AS s ON {join}
+                WHERE {deleteWhere};
+                """;
+            await using var reader = await delete.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var targetValues = ReadPrefixed(reader, "t_", copyable);
+                var keys = keyNames.Select(name => targetValues.TryGetValue(name, out var value) ? value : null).ToArray();
+                await backups.AddAsync(new ConflictRow
+                {
+                    Operation = "Delete",
+                    KeyNames = keyNames,
+                    KeyValues = keys,
+                    TargetValues = targetValues,
+                    MainValues = null,
+                    TargetChangeTimestamp = TimestampValue.Read(targetValues.GetValueOrDefault(changeColumn.Name))
+                }, cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (deleteWhere is null)
+        {
+            return;
+        }
+
+        await using var deleteAll = targetConnection.CreateCommand();
+        deleteAll.CommandTimeout = timeout;
+        deleteAll.CommandText = $"""
+            SELECT {targetList}
+            FROM {table.FullName} AS t
+            LEFT JOIN #SyncStaging AS s ON {join}
+            WHERE {deleteWhere};
+            """;
+        await using var deleteReader = await deleteAll.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await deleteReader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var targetValues = ReadPrefixed(deleteReader, "t_", copyable);
+            var keys = keyNames.Select(name => targetValues.TryGetValue(name, out var value) ? value : null).ToArray();
+            await backups.AddAsync(new ConflictRow
+            {
+                Operation = "Delete",
+                KeyNames = keyNames,
+                KeyValues = keys,
+                TargetValues = targetValues,
+                MainValues = null,
+                TargetChangeTimestamp = changeColumn is null ? null : TimestampValue.Read(targetValues.GetValueOrDefault(changeColumn.Name))
+            }, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static Dictionary<string, object?> ReadPrefixed(SqlDataReader reader, string prefix, IReadOnlyList<ColumnSchema> columns)
+    {
+        var values = new Dictionary<string, object?>(columns.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var column in columns)
+        {
+            var ordinal = reader.GetOrdinal(prefix + column.Name);
+            values[column.Name] = reader.IsDBNull(ordinal) ? null : reader.GetValue(ordinal);
+        }
+
+        return values;
     }
 
     private async Task<TableSyncResult> CopyAllAsInsertsAsync(
@@ -530,7 +843,7 @@ public sealed class TableSyncService : ITableSyncService
         SqlConnection targetConnection,
         TableSchema table,
         int timeout,
-        int batchSize,
+        SyncSettings settings,
         CancellationToken cancellationToken)
     {
         var pk = Q(table.PrimaryKeyColumns[0].Name);
@@ -542,7 +855,7 @@ public sealed class TableSyncService : ITableSyncService
         if (sourceEdge.Count == 0 || targetEdge.Count == 0 || sourceEdge.Min is null || sourceEdge.Max is null || targetEdge.Min is null || targetEdge.Max is null)
         {
             return await CollectFingerprintDiffsAsync(
-                sourceConnection, targetConnection, table, timeout, batchSize,
+                sourceConnection, targetConnection, table, timeout, settings.FingerprintBatchSize,
                 sourcePredicate: null, targetPredicate: null, sourceParameters: [], includeDeletes: true, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -556,31 +869,27 @@ public sealed class TableSyncService : ITableSyncService
         var sourceBuckets = await sourceBucketTask.ConfigureAwait(false);
         var targetBuckets = await targetBucketTask.ConfigureAwait(false);
         long bytes = (sourceBuckets.Count + targetBuckets.Count) * 48L;
-        var mismatched = RangeHashPlanner.MismatchedBuckets(sourceBuckets, targetBuckets)
-            .Select(index => RangeHashPlanner.Bounds(origin, width, index, end))
-            .ToList();
+        var mismatched = BucketRanges(sourceBuckets, targetBuckets, origin, width, end);
 
         var depth = 0;
-        while (mismatched.Any(range => range.Span > RangeHashPlanner.LeafSpan) && depth < 6)
+        while (mismatched.Any(range => range.Range.Span > RangeHashPlanner.LeafSpan) && depth < 6)
         {
-            var wide = mismatched.Where(range => range.Span > RangeHashPlanner.LeafSpan).ToList();
-            var narrow = mismatched.Where(range => range.Span <= RangeHashPlanner.LeafSpan).ToList();
-            var widest = wide.Max(range => range.Span);
+            var wide = mismatched.Where(range => range.Range.Span > RangeHashPlanner.LeafSpan).ToList();
+            var narrow = mismatched.Where(range => range.Range.Span <= RangeHashPlanner.LeafSpan).ToList();
+            var widest = wide.Max(range => range.Range.Span);
             var finer = Math.Max(1, widest / 8);
             if (finer >= widest)
             {
                 break;
             }
 
-            var sourceRefineTask = ReadRangeBucketsAsync(sourceConnection, table, pk, origin, finer, wide, timeout, cancellationToken);
-            var targetRefineTask = ReadRangeBucketsAsync(targetConnection, table, pk, origin, finer, wide, timeout, cancellationToken);
+            var sourceRefineTask = ReadRangeBucketsAsync(sourceConnection, table, pk, origin, finer, wide.Select(range => range.Range).ToList(), timeout, cancellationToken);
+            var targetRefineTask = ReadRangeBucketsAsync(targetConnection, table, pk, origin, finer, wide.Select(range => range.Range).ToList(), timeout, cancellationToken);
             await Task.WhenAll(sourceRefineTask, targetRefineTask).ConfigureAwait(false);
             sourceBuckets = await sourceRefineTask.ConfigureAwait(false);
             targetBuckets = await targetRefineTask.ConfigureAwait(false);
             bytes += (sourceBuckets.Count + targetBuckets.Count) * 48L;
-            var refined = RangeHashPlanner.MismatchedBuckets(sourceBuckets, targetBuckets)
-                .Select(index => RangeHashPlanner.Bounds(origin, finer, index, end))
-                .ToList();
+            var refined = BucketRanges(sourceBuckets, targetBuckets, origin, finer, end);
             mismatched = narrow.Concat(refined).ToList();
             depth++;
         }
@@ -594,7 +903,27 @@ public sealed class TableSyncService : ITableSyncService
             return new CollectedDiff([], sourceEdge.Count, bytes);
         }
 
-        var predicate = string.Join(" OR ", mismatched.Select(range => $"({pk} >= {range.Start} AND {pk} <= {range.EndInclusive})"));
+        var mismatchedRows = mismatched.Sum(range => range.Rows);
+        var decision = BulkFallbackPolicy.Decide(
+            settings.BulkFallbackEnabled,
+            sourceEdge.Count,
+            mismatchedRows,
+            settings.BulkFallbackSmallTableRows,
+            settings.BulkFallbackMismatchedRows,
+            settings.BulkFallbackChangedFraction,
+            settings.BulkFallbackFractionMinRows);
+        if (decision.UseBulkPath)
+        {
+            _logger.LogInformation(
+                "Bulk fallback for {Table}. Reason={Reason} SourceRows={SourceRows} MismatchedRows={MismatchedRows}",
+                table.FullName,
+                decision.Reason,
+                sourceEdge.Count,
+                mismatchedRows);
+            return new CollectedDiff([], sourceEdge.Count, bytes, true, decision.Reason);
+        }
+
+        var predicate = string.Join(" OR ", mismatched.Select(range => $"({pk} >= {range.Range.Start} AND {pk} <= {range.Range.EndInclusive})"));
         var hashSql = RowHashSqlBuilder.BuildCheapRowTokenExpression(table);
         var sourceRowTask = ReadProjectedHashesAsync(sourceConnection, table, pk, hashSql, predicate, timeout, cancellationToken);
         var targetRowTask = ReadProjectedHashesAsync(targetConnection, table, pk, hashSql, predicate, timeout, cancellationToken);
@@ -803,7 +1132,27 @@ public sealed class TableSyncService : ITableSyncService
         return rows;
     }
 
-    private sealed record CollectedDiff(List<DiffKey> Diffs, long SourceRows, long Bytes);
+    private sealed record CollectedDiff(List<DiffKey> Diffs, long SourceRows, long Bytes, bool BulkFallback = false, string BulkReason = "");
+
+    private readonly record struct CountedRange(RangeHashPlanner.KeyRange Range, long Rows);
+
+    private static List<CountedRange> BucketRanges(
+        IReadOnlyDictionary<long, (long Count, byte[] Hash)> source,
+        IReadOnlyDictionary<long, (long Count, byte[] Hash)> target,
+        long origin,
+        long width,
+        long end)
+    {
+        var ranges = new List<CountedRange>();
+        foreach (var index in RangeHashPlanner.MismatchedBuckets(source, target))
+        {
+            var sourceCount = source.TryGetValue(index, out var sourceBucket) ? sourceBucket.Count : 0;
+            var targetCount = target.TryGetValue(index, out var targetBucket) ? targetBucket.Count : 0;
+            ranges.Add(new CountedRange(RangeHashPlanner.Bounds(origin, width, index, end), Math.Max(sourceCount, targetCount)));
+        }
+
+        return ranges;
+    }
 
     private static async Task<long> BulkCopyFingerprintsAsync(
         SqlConnection sourceConnection,
