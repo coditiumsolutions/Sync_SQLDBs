@@ -46,6 +46,7 @@ benchmarks/results/conflicts/
 
 ## Publish output
 publish/
+live_sync/
 live_synchronisedb/
 live_sync_dbs/
 *.rar

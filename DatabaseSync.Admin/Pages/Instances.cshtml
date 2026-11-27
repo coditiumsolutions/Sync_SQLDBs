@@ -1,25 +1,25 @@
 @page
 @model DatabaseSync.Admin.Pages.InstancesModel
 @{
-    ViewData["Title"] = "Instances";
+    ViewData["Title"] = "Databases";
 }
 
 <div class="mb-3 d-flex align-items-start justify-content-between gap-3 flex-wrap">
     <div>
-        <h1 class="h3 mb-1">Instances</h1>
+        <h1 class="h3 mb-1">Databases</h1>
         <div class="form-hint mb-0">
-            Run <strong>one instance at a time</strong> on shared port <strong>@Model.SharedPort</strong>
+            Run <strong>one database at a time</strong> on shared port <strong>@Model.SharedPort</strong>
             (<code>@Model.SharedAdminUrl</code>).
-            Starting an instance stops any other running instance first.
+            Starting a database stops any other running database first.
         </div>
     </div>
-    <button type="button" class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#addInstanceModal">Add instance</button>
+    <button type="button" class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#addInstanceModal">Add database</button>
 </div>
 
 @if (Model.Editing is not null)
 {
     <div class="panel mb-3">
-        <h2 class="h5 mb-3">Edit instance</h2>
+        <h2 class="h5 mb-3">Edit database</h2>
         <form method="post" asp-page-handler="Edit" class="row g-3">
             <input type="hidden" asp-for="OriginalName" />
             <div class="col-md-4">
@@ -28,7 +28,7 @@
                 <div class="form-hint">Rename moves the instance folder. Stop the instance before renaming.</div>
             </div>
             <div class="col-md-5">
-                <label class="form-label" asp-for="DatabaseHint">Database hint</label>
+                <label class="form-label" asp-for="DatabaseHint">Database Hint</label>
                 <input class="form-control" asp-for="DatabaseHint" />
                 <div class="form-hint">Also updates Database on connections in sync-config when possible.</div>
             </div>
@@ -52,7 +52,7 @@
 <div class="panel">
     @if (Model.Instances.Count == 0)
     {
-        <p class="mb-0 text-muted">No instances yet. Click <strong>Add instance</strong> to create one.</p>
+        <p class="mb-0 text-muted">No databases yet. Click <strong>Add database</strong> to create one.</p>
     }
     else
     {
@@ -60,8 +60,8 @@
             <table class="table align-middle mb-0">
                 <thead>
                 <tr>
-                    <th>Instance</th>
                     <th>Database</th>
+                    <th>Database Hint</th>
                     <th>Status</th>
                     <th class="text-end">Actions</th>
                 </tr>
@@ -74,14 +74,14 @@
                             <strong>@i.Name</strong>
                             @if (i.IsRunning)
                             {
-                                <span class="badge-main ms-1">Active Instance</span>
+                                <span class="badge-main ms-1">Active Database</span>
                             }
                         </td>
                         <td>@i.DatabaseHint</td>
                         <td>
                             @if (i.IsRunning)
                             {
-                                <span>Active Instance: <strong>@i.Name</strong></span>
+                                <span>Active Database - <strong>@i.Name</strong></span>
                             }
                             else
                             {
@@ -129,7 +129,7 @@
     <div class="modal-dialog">
         <form method="post" asp-page-handler="Add" class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="addInstanceLabel">Add instance</h5>
+                <h5 class="modal-title" id="addInstanceLabel">Add database</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -140,7 +140,7 @@
                     <div class="form-hint">Letters, numbers, underscore, hyphen.</div>
                 </div>
                 <div class="mb-0">
-                    <label class="form-label" for="addDb">Database hint</label>
+                    <label class="form-label" for="addDb">Database Hint</label>
                     <input class="form-control" id="addDb" name="DatabaseHint" placeholder="e.g. RND_POS_Sync" />
                     <div class="form-hint">Used as the default database name in the new sync-config.</div>
                 </div>

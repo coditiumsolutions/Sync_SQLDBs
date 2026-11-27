@@ -17,8 +17,9 @@
     <div class="container d-flex align-items-center justify-content-between py-3">
         <a class="brand" asp-page="/Index">Coditium Sync Admin</a>
         <nav class="nav-links d-flex align-items-center flex-wrap">
-            <a asp-page="/Instances">Instances</a>
-            <a asp-page="/Connections/Index">Connections</a>
+            <a asp-page="/Connections/Index">Servers</a>
+            <a asp-page="/Instances">Databases</a>
+            <a asp-page="/Index">Dashboard</a>
             <div class="dropdown d-inline-block">
                 <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                     Other Actions
@@ -53,22 +54,21 @@
     {
         <div class="panel mb-3 active-instance-banner">
             <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-                <div>
-                    <div class="form-hint mb-1">Active Instance</div>
+                <div class="h5 mb-0">
                     @if (!string.IsNullOrWhiteSpace(ActiveInstance.Name))
                     {
-                        <div class="h5 mb-0">@ActiveInstance.Name</div>
+                        <text>Active Database - @ActiveInstance.Name</text>
                     }
                     else
                     {
-                        <div class="h5 mb-0 text-muted">None</div>
+                        <span class="text-muted">Active Database - None</span>
                     }
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <form method="post" asp-page="/Index" asp-page-handler="TestAll" class="d-inline">
                         <button type="submit" class="btn btn-sm btn-outline-secondary">Test all connections</button>
                     </form>
-                    <a class="btn btn-sm btn-outline-secondary" asp-page="/Instances">Manage instances</a>
+                    <a class="btn btn-sm btn-outline-secondary" asp-page="/Instances">Manage databases</a>
                 </div>
             </div>
         </div>

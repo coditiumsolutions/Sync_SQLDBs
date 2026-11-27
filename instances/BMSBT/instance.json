@@ -1,0 +1,8 @@
+﻿{
+    "name":  "BMSBT",
+    "port":  5088,
+    "adminUrl":  "http://127.0.0.1:5088",
+    "databaseHint":  "Alfalah Building Server",
+    "configPath":  "D:\\Dotnet\\CoreCursor\\SynchroniseDB\\instances\\BMSBT\\sync-config.json",
+    "createdAtUtc":  "2026-11-27T06:55:33.9172125Z"
+}

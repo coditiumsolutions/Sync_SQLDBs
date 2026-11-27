@@ -1,0 +1,8 @@
+﻿{
+    "name":  "ABC",
+    "port":  5088,
+    "adminUrl":  "http://127.0.0.1:5088",
+    "databaseHint":  "ABC Demo",
+    "configPath":  "D:\\Dotnet\\CoreCursor\\SynchroniseDB\\instances\\ABC\\sync-config.json",
+    "createdAtUtc":  "2026-11-27T04:16:31.7011616Z"
+}

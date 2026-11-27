@@ -1,15 +1,15 @@
 @page
 @model DatabaseSync.Admin.Pages.Connections.IndexModel
 @{
-    ViewData["Title"] = "Connections";
+    ViewData["Title"] = "Servers";
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h1 class="h3 mb-1">Connections</h1>
+        <h1 class="h3 mb-1">Servers</h1>
         <div class="form-hint">Nominate any connection as Main. All other enabled connections become sync targets.</div>
     </div>
-    <a class="btn btn-accent" asp-page="./Edit">Add connection</a>
+    <a class="btn btn-accent" asp-page="./Edit">Add Server</a>
 </div>
 
 <div class="panel">
@@ -23,9 +23,9 @@
             <table class="table align-middle mb-0">
                 <thead>
                 <tr>
+                    <th>Server / Database</th>
                     <th>Name</th>
                     <th>Role</th>
-                    <th>Server / Database</th>
                     <th>Enabled</th>
                     <th>Status</th>
                     <th></th>
@@ -36,20 +36,20 @@
                 {
                     Model.TestStatuses.TryGetValue(c.Id, out var testStatus);
                     <tr>
+                        <td>@c.Server / @c.Database</td>
                         <td>
                             <strong>@c.Name</strong>
                         </td>
                         <td>
                             @if (c.IsMain)
                             {
-                                <span class="badge-main">MAIN</span>
+                                <span class="badge-main">Source</span>
                             }
                             else
                             {
                                 <span class="badge-target">TARGET</span>
                             }
                         </td>
-                        <td>@c.Server / @c.Database</td>
                         <td>@(c.IsEnabled ? "Yes" : "No")</td>
                         <td>
                             @if (testStatus is null)
