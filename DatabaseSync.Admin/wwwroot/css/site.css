@@ -7,6 +7,7 @@
   --accent-soft: #e7f5f0;
   --warn: #9a6700;
   --card: #ffffff;
+  --gold-line: #c9a227;
 }
 
 html, body {
@@ -291,4 +292,71 @@ code.path {
 .detail-list dt {
   color: var(--muted);
   font-weight: 600;
+}
+
+.server-edit-form .server-form-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(160px, 1.4fr) minmax(120px, 0.9fr) minmax(160px, 1.4fr);
+  gap: 0.75rem 1rem;
+  align-items: start;
+}
+
+.server-edit-form .server-form-title {
+  font-weight: 600;
+  color: var(--ink);
+  padding-top: 0.55rem;
+  margin-bottom: 0;
+}
+
+.server-edit-form .server-form-field .form-hint {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+}
+
+.server-edit-form .server-form-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding-top: 0.45rem;
+}
+
+.server-edit-form .server-form-gold-line {
+  border: 0;
+  border-top: 1px solid var(--gold-line);
+  opacity: 1;
+  margin: 0.85rem 0;
+}
+
+@media (max-width: 767.98px) {
+  .server-edit-form .server-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .server-edit-form .server-form-title {
+    padding-top: 0;
+  }
+}
+
+.project-edit-tabs {
+  border-bottom: 1px solid var(--line);
+}
+
+.project-edit-tabs .nav-link {
+  color: var(--muted);
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.project-edit-tabs .nav-link:hover,
+.project-edit-tabs .nav-link:focus {
+  color: var(--accent);
+  border-color: transparent transparent var(--line);
+}
+
+.project-edit-tabs .nav-link.active {
+  color: var(--accent);
+  background: var(--card);
+  border-color: var(--line) var(--line) var(--card);
 }

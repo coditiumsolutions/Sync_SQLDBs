@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DatabaseSync.Core.Interfaces;
+using DatabaseSync.Core.Models.Management;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -17,10 +18,12 @@ public class InstancesModel : PageModel
     };
 
     private readonly ISyncConfigStore _configStore;
+    private readonly IManagementStore _managementStore;
 
-    public InstancesModel(ISyncConfigStore configStore)
+    public InstancesModel(ISyncConfigStore configStore, IManagementStore managementStore)
     {
         _configStore = configStore;
+        _managementStore = managementStore;
     }
 
     public string? CurrentInstanceName { get; private set; }
@@ -59,7 +62,7 @@ public class InstancesModel : PageModel
         }
     }
 
-    public IActionResult OnPostAdd()
+    public async Task<IActionResult> OnPostAddAsync()
     {
         Load();
         var name = (Name ?? "").Trim();
@@ -67,21 +70,21 @@ public class InstancesModel : PageModel
 
         if (!Regex.IsMatch(name, @"^[A-Za-z0-9_\-]+$"))
         {
-            TempData["ErrorMessage"] = "Instance name may only contain letters, numbers, underscore, and hyphen.";
+            TempData["ErrorMessage"] = "Database name may only contain letters, numbers, underscore, and hyphen.";
             return RedirectToPage();
         }
 
         var root = GetInstancesRoot();
         if (string.IsNullOrWhiteSpace(root))
         {
-            TempData["ErrorMessage"] = "Instances folder not found.";
+            TempData["ErrorMessage"] = "Databases folder not found.";
             return RedirectToPage();
         }
 
         var dir = Path.Combine(root, name);
         if (Directory.Exists(dir) && System.IO.File.Exists(Path.Combine(dir, "instance.json")))
         {
-            TempData["ErrorMessage"] = $"Instance '{name}' already exists.";
+            TempData["ErrorMessage"] = $"Database '{name}' already exists.";
             return RedirectToPage();
         }
 
@@ -92,17 +95,24 @@ public class InstancesModel : PageModel
             WriteMeta(dir, name, db, configPath, createdAtUtc: null);
             EnsureSyncConfig(dir, name, db, overwrite: false);
             WriteLocalScripts(dir, name);
-            TempData["StatusMessage"] = $"Instance '{name}' added. Edit Connections after you Start it.";
+            await _managementStore.UpsertManagedDatabaseAsync(new ManagedDatabaseRecord
+            {
+                Name = name,
+                DatabaseHint = db,
+                CreatedAtUtc = DateTimeOffset.UtcNow,
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            });
+            TempData["StatusMessage"] = $"Database '{name}' added. Edit Servers after you Start it.";
         }
         catch (Exception ex)
         {
-            TempData["ErrorMessage"] = "Could not add instance: " + ex.Message;
+            TempData["ErrorMessage"] = "Could not add database: " + ex.Message;
         }
 
         return RedirectToPage();
     }
 
-    public IActionResult OnPostEdit()
+    public async Task<IActionResult> OnPostEditAsync()
     {
         Load();
         var original = (OriginalName ?? Name ?? "").Trim();
@@ -195,12 +205,19 @@ public class InstancesModel : PageModel
                 configNote = " (database hint saved; sync-config update skipped: " + cfgEx.Message + ")";
             }
 
-            TempData["StatusMessage"] = $"Instance '{name}' updated." + configNote;
+            await _managementStore.UpsertManagedDatabaseAsync(new ManagedDatabaseRecord
+            {
+                Name = name,
+                DatabaseHint = db,
+                CreatedAtUtc = DateTimeOffset.UtcNow,
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            });
+            TempData["StatusMessage"] = $"Database '{name}' updated." + configNote;
             return RedirectToPage();
         }
         catch (Exception ex)
         {
-            TempData["ErrorMessage"] = "Could not update instance: " + ex.Message + " You can Delete this instance and Add it again.";
+            TempData["ErrorMessage"] = "Could not update database: " + ex.Message + " You can Delete this database and Add it again.";
             return RedirectToPage(null, new { edit = original });
         }
     }

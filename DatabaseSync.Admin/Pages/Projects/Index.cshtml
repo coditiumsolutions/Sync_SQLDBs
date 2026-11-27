@@ -1,0 +1,87 @@
+@page
+@model DatabaseSync.Admin.Pages.Projects.IndexModel
+@{
+    ViewData["Title"] = "Synchronization";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-1">Synchronization</h1>
+        <div class="form-hint">One project can include multiple databases (source + targets).</div>
+        <div class="form-hint">Shared across all products (SQLite): <code class="path">@Model.DatabasePath</code></div>
+    </div>
+    <a class="btn btn-accent" asp-page="./Edit">Add Project</a>
+</div>
+
+<div class="panel">
+    @if (Model.Projects.Count == 0)
+    {
+        <p class="mb-0 text-muted">No projects yet. Click <strong>Add Project</strong> to create one.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>Project Name</th>
+                    <th>Project Hint</th>
+                    <th>Databases</th>
+                    <th>ActiveStatus</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var p in Model.Projects)
+                {
+                    <tr class="@(p.IsActive ? "table-success" : "")">
+                        <td>
+                            <strong>@p.Name</strong>
+                            @if (p.IsActive)
+                            {
+                                <span class="badge-main ms-1">Active</span>
+                            }
+                        </td>
+                        <td>@p.ProjectHint</td>
+                        <td>@p.Databases.Count</td>
+                        <td>
+                            @if (p.IsActive)
+                            {
+                                <span>Active</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Inactive</span>
+                            }
+                        </td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-secondary" asp-page="./Edit" asp-route-id="@p.Id">Edit</a>
+                            @if (p.IsActive)
+                            {
+                                <form method="post" asp-page-handler="SetActive" class="d-inline">
+                                    <input type="hidden" name="id" value="@p.Id" />
+                                    <input type="hidden" name="isActive" value="false" />
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">Set Inactive</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <form method="post" asp-page-handler="SetActive" class="d-inline">
+                                    <input type="hidden" name="id" value="@p.Id" />
+                                    <input type="hidden" name="isActive" value="true" />
+                                    <button type="submit" class="btn btn-sm btn-accent">Set Active</button>
+                                </form>
+                            }
+                            <form method="post" asp-page-handler="Delete" class="d-inline"
+                                  onsubmit="return confirm('Delete project @p.Name and its databases?');">
+                                <input type="hidden" name="id" value="@p.Id" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

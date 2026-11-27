@@ -24,6 +24,8 @@ sync-run.lock
 Conflicts/
 management.db
 **/management.db
+synchronization.db
+**/synchronization.db
 *.db-wal
 *.db-shm
 _dbcopy/
@@ -35,6 +37,8 @@ instances/*/.run/
 instances/*/sync-config.json
 instances/*/management.db
 instances/*/management.db-*
+instances/synchronization.db
+instances/synchronization.db-*
 instances/*/Conflicts/
 instances/active-product.txt
 

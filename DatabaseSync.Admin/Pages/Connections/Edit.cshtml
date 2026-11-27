@@ -1,75 +1,100 @@
 @page "{id?}"
 @model DatabaseSync.Admin.Pages.Connections.EditModel
 @{
-    ViewData["Title"] = Model.IsNew ? "Add connection" : "Edit connection";
+    ViewData["Title"] = Model.IsNew ? "Add Server" : "Edit Server";
 }
 
 <h1 class="h3 mb-3">@ViewData["Title"]</h1>
 
 <div class="panel">
-    <form method="post" class="row g-3">
+    <form method="post" class="server-edit-form">
         <input type="hidden" asp-for="Input.Id" />
 
-        <div class="col-md-6">
-            <label asp-for="Input.Name" class="form-label"></label>
-            <input asp-for="Input.Name" class="form-control" />
-            <span asp-validation-for="Input.Name" class="text-danger"></span>
+        <div class="server-form-row">
+            <label asp-for="Input.DatabaseName" class="server-form-title"></label>
+            <div class="server-form-field">
+                <input asp-for="Input.DatabaseName" class="form-control" placeholder="e.g. POS" />
+                <div class="form-hint">Letters, numbers, underscore, hyphen.</div>
+                <span asp-validation-for="Input.DatabaseName" class="text-danger"></span>
+            </div>
+            <label asp-for="Input.Database" class="server-form-title"></label>
+            <div class="server-form-field">
+                <input asp-for="Input.Database" class="form-control" placeholder="e.g. RND_POS_Sync" />
+                <div class="form-hint">SQL database name used on this server.</div>
+                <span asp-validation-for="Input.Database" class="text-danger"></span>
+            </div>
         </div>
+        <hr class="server-form-gold-line" />
 
-        <div class="col-md-3 form-check mt-4 pt-3">
-            <input asp-for="Input.IsMain" class="form-check-input" />
-            <label asp-for="Input.IsMain" class="form-check-label"></label>
+        <div class="server-form-row">
+            <label asp-for="Input.Name" class="server-form-title"></label>
+            <div class="server-form-field">
+                <input asp-for="Input.Name" class="form-control" placeholder="Host provider name" />
+                <span asp-validation-for="Input.Name" class="text-danger"></span>
+            </div>
+            <label asp-for="Input.Server" class="server-form-title"></label>
+            <div class="server-form-field">
+                <input asp-for="Input.Server" class="form-control" placeholder="IP or hostname" />
+                <span asp-validation-for="Input.Server" class="text-danger"></span>
+            </div>
         </div>
+        <hr class="server-form-gold-line" />
 
-        <div class="col-md-3 form-check mt-4 pt-3">
-            <input asp-for="Input.IsEnabled" class="form-check-input" />
-            <label asp-for="Input.IsEnabled" class="form-check-label"></label>
+        <div class="server-form-row">
+            <label asp-for="Input.UserId" class="server-form-title"></label>
+            <div class="server-form-field">
+                <input asp-for="Input.UserId" class="form-control" />
+            </div>
+            <label asp-for="Input.Password" class="server-form-title"></label>
+            <div class="server-form-field">
+                <input asp-for="Input.Password" class="form-control" autocomplete="new-password" />
+                <div class="form-hint">Leave blank when editing to keep the existing password.</div>
+            </div>
         </div>
+        <hr class="server-form-gold-line" />
 
-        <div class="col-md-6">
-            <label asp-for="Input.Server" class="form-label"></label>
-            <input asp-for="Input.Server" class="form-control" placeholder="IP or hostname" />
-            <span asp-validation-for="Input.Server" class="text-danger"></span>
+        <div class="server-form-row">
+            <label asp-for="Input.ConnectionTimeoutSeconds" class="server-form-title"></label>
+            <div class="server-form-field">
+                <input asp-for="Input.ConnectionTimeoutSeconds" class="form-control" />
+            </div>
+            <span class="server-form-title">Options</span>
+            <div class="server-form-field server-form-checks">
+                <div class="form-check">
+                    <input asp-for="Input.IsMain" class="form-check-input" />
+                    <label asp-for="Input.IsMain" class="form-check-label"></label>
+                </div>
+                <div class="form-check">
+                    <input asp-for="Input.IsEnabled" class="form-check-input" />
+                    <label asp-for="Input.IsEnabled" class="form-check-label"></label>
+                </div>
+            </div>
         </div>
+        <hr class="server-form-gold-line" />
 
-        <div class="col-md-6">
-            <label asp-for="Input.Database" class="form-label"></label>
-            <input asp-for="Input.Database" class="form-control" />
-            <span asp-validation-for="Input.Database" class="text-danger"></span>
+        <div class="server-form-row">
+            <span class="server-form-title">Security</span>
+            <div class="server-form-field server-form-checks">
+                <div class="form-check">
+                    <input asp-for="Input.IntegratedSecurity" class="form-check-input" />
+                    <label asp-for="Input.IntegratedSecurity" class="form-check-label"></label>
+                </div>
+                <div class="form-check">
+                    <input asp-for="Input.Encrypt" class="form-check-input" />
+                    <label asp-for="Input.Encrypt" class="form-check-label"></label>
+                </div>
+            </div>
+            <span class="server-form-title">Certificate</span>
+            <div class="server-form-field server-form-checks">
+                <div class="form-check">
+                    <input asp-for="Input.TrustServerCertificate" class="form-check-input" />
+                    <label asp-for="Input.TrustServerCertificate" class="form-check-label"></label>
+                </div>
+            </div>
         </div>
+        <hr class="server-form-gold-line" />
 
-        <div class="col-md-12 form-check">
-            <input asp-for="Input.IntegratedSecurity" class="form-check-input" />
-            <label asp-for="Input.IntegratedSecurity" class="form-check-label"></label>
-        </div>
-
-        <div class="col-md-4">
-            <label asp-for="Input.UserId" class="form-label"></label>
-            <input asp-for="Input.UserId" class="form-control" />
-        </div>
-
-        <div class="col-md-4">
-            <label asp-for="Input.Password" class="form-label"></label>
-            <input asp-for="Input.Password" class="form-control" autocomplete="new-password" />
-            <div class="form-hint">Leave blank when editing to keep the existing password.</div>
-        </div>
-
-        <div class="col-md-4">
-            <label asp-for="Input.ConnectionTimeoutSeconds" class="form-label"></label>
-            <input asp-for="Input.ConnectionTimeoutSeconds" class="form-control" />
-        </div>
-
-        <div class="col-md-3 form-check">
-            <input asp-for="Input.Encrypt" class="form-check-input" />
-            <label asp-for="Input.Encrypt" class="form-check-label"></label>
-        </div>
-
-        <div class="col-md-4 form-check">
-            <input asp-for="Input.TrustServerCertificate" class="form-check-input" />
-            <label asp-for="Input.TrustServerCertificate" class="form-check-label"></label>
-        </div>
-
-        <div class="col-12 d-flex gap-2 mt-3">
+        <div class="d-flex gap-2 mt-3">
             <button type="submit" class="btn btn-accent">Save</button>
             <a class="btn btn-outline-secondary" asp-page="./Index">Cancel</a>
         </div>

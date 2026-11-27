@@ -37,4 +37,24 @@ public interface IManagementStore
     Task SaveTableSelectionSnapshotAsync(TableSelectionSnapshot snapshot, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<TableSelectionSnapshot>> ListTableSelectionSnapshotsAsync(int take = 50, CancellationToken cancellationToken = default);
+
+    Task UpsertManagedDatabaseAsync(ManagedDatabaseRecord database, CancellationToken cancellationToken = default);
+
+    Task<ManagedDatabaseRecord?> GetManagedDatabaseByNameAsync(string name, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ManagedDatabaseRecord>> ListManagedDatabasesAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ProjectRecord>> ListProjectsAsync(CancellationToken cancellationToken = default);
+
+    Task<ProjectRecord?> GetProjectAsync(long id, CancellationToken cancellationToken = default);
+
+    Task<long> SaveProjectAsync(ProjectRecord project, CancellationToken cancellationToken = default);
+
+    Task DeleteProjectAsync(long id, CancellationToken cancellationToken = default);
+
+    Task SetProjectActiveAsync(long id, bool isActive, CancellationToken cancellationToken = default);
+
+    Task DeleteProjectDatabaseAsync(long projectDatabaseId, CancellationToken cancellationToken = default);
+
+    Task<long> UpsertProjectDatabaseAsync(ProjectDatabaseRecord database, CancellationToken cancellationToken = default);
 }

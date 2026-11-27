@@ -44,6 +44,8 @@ $meta | ConvertTo-Json | Set-Content -Path $metaPath -Encoding UTF8
 
 $url = "http://127.0.0.1:$port"
 $mgmtDb = Join-Path $instanceRoot "management.db"
+# Synchronization projects are shared across all products (do not vanish on Active Database switch)
+$syncProjectsDb = Join-Path $PSScriptRoot "synchronization.db"
 
 function Stop-Tracked([string]$file, [string]$label) {
     if (-not (Test-Path $file)) { return }
@@ -125,10 +127,11 @@ function Start-TrackedProcess {
 }
 
 $envMap = @{
-    SyncConfigStore__FilePath = $configPath
-    ManagementDb__FilePath    = $mgmtDb
-    ASPNETCORE_URLS           = $url
-    ASPNETCORE_ENVIRONMENT    = "Production"
+    SyncConfigStore__FilePath     = $configPath
+    ManagementDb__FilePath        = $mgmtDb
+    SynchronizationDb__FilePath   = $syncProjectsDb
+    ASPNETCORE_URLS               = $url
+    ASPNETCORE_ENVIRONMENT        = "Production"
 }
 
 # Mark active product

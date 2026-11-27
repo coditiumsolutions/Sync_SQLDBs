@@ -21,10 +21,13 @@ public static class DependencyInjection
             configuration.GetSection(SyncConfigStoreOptions.SectionName));
         services.Configure<ManagementDbOptions>(
             configuration.GetSection(ManagementDbOptions.SectionName));
+        services.Configure<SynchronizationDbOptions>(
+            configuration.GetSection(SynchronizationDbOptions.SectionName));
 
         services.AddSingleton<ISyncConfigStore, SyncConfigStore>();
         services.AddSingleton<ISyncStatusStore, SyncStatusStore>();
         services.AddSingleton<IManagementStore, SqliteManagementStore>();
+        services.AddSingleton<IProjectStore, SqliteProjectStore>();
         services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
         services.AddSingleton<IDatabaseConnectionService, DatabaseConnectionService>();
         services.AddSingleton<IConnectivityCheckService, ConnectivityCheckService>();

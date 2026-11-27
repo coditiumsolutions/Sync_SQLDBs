@@ -44,6 +44,8 @@ using (var scope = app.Services.CreateScope())
 {
     var management = scope.ServiceProvider.GetRequiredService<IManagementStore>();
     await management.InitializeAsync();
+    var projects = scope.ServiceProvider.GetRequiredService<IProjectStore>();
+    await projects.InitializeAsync();
 }
 
 if (!app.Environment.IsDevelopment())
